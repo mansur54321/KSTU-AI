@@ -19,7 +19,6 @@
 1. Склонируйте или скачайте репозиторий:
    ```bash
    git clone https://github.com/yourusername/gemini-quiz-solver.git
-``
 
 2. Откройте Chrome и перейдите на:
 
