@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .container {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+      margin: 0 0 20px 0;
+      font-size: 20px;
+      color: #333;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .gemini-logo {
+      font-size: 24px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #555;
+      font-size: 14px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 13px;
+      transition: border-color 0.3s;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    button {
+      flex: 1;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    #testApi {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    #status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+      display: none;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 2px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 2px solid #f5c6cb;
+    }
+    .info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 2px solid #bee5eb;
+    }
+    .instruction-box {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .instruction-box strong {
+      display: block;
+      margin-bottom: 10px;
+      color: #667eea;
+      font-size: 14px;
+    }
+    .instruction-box ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .instruction-box li {
+      margin: 8px 0;
+    }
+    .instruction-box a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+    .instruction-box a:hover {
+      color: #764ba2;
+      text-decoration: underline;
+    }
+    .feature-box {
+      margin-top: 15px;
+      padding: 12px;
+      background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .feature-box strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #d84315;
+    }
+    .limits-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>
+      <span class="gemini-logo">✨</span>
+      AI Test Helper (Gemini)
+    </h2>
+    
+    <label for="apiKey">Google Gemini API Key:</label>
+    <input type="text" id="apiKey" placeholder="Вставьте ваш API ключ...">
+    
+    <div class="button-group">
+      <button id="save">💾 Сохранить</button>
+      <button id="testApi">🧪 Тест</button>
+    </div>
+    
+    <div id="status"></div>
+    
+    <div class="instruction-box">
+      <strong>📝 Как получить бесплатный API ключ:</strong>
+      <ol>
+        <li>Откройте <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
+        <li>Войдите в свой Google аккаунт</li>
+        <li>Нажмите "Create API Key"</li>
+        <li>Скопируйте ключ и вставьте выше</li>
+        <li>Нажмите "💾 Сохранить" и "🧪 Тест"</li>
+      </ol>
+      
+      <strong style="margin-top: 15px;">🚀 Использование:</strong>
+      <ol>
+        <li>Откройте страницу с тестом</li>
+        <li>Нажмите "🤖 Получить ответы"</li>
+        <li>Дождитесь обработки</li>
+        <li>Проверьте выбранные ответы</li>
+      </ol>
+    </div>
+
+    <div class="feature-box">
+      <strong>✨ Преимущества Gemini 2.0 Flash:</strong>
+      • Бесплатно до 1500 запросов/день<br>
+      • Высокая точность ответов<br>
+      • Быстрая обработка<br>
+      • Поддержка русского языка
+    </div>
+
+    <div class="limits-info">
+      <strong>⚙️ Лимиты бесплатного tier:</strong><br>
+      • 15 запросов в минуту<br>
+      • 1500 запросов в день<br>
+      • Расширение автоматически соблюдает лимиты
+    </div>
+  </div>
+
+  <script src="popup.js" defer></script>
+</body>
+</html>
