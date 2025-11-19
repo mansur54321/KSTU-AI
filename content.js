@@ -264,13 +264,22 @@ async function solveAll() {
 
 // --- INIT ---
 function init() {
-    unlockSite();
+    unlockSite(); // Снимаем блокировки
 
-    document.addEventListener('keydown', async (e) => {
-        if (e.altKey === USE_ALT_KEY && e.code === HOTKEY_CODE) await solveAll();
-    });
+    // УСИЛЕННЫЙ СЛУШАТЕЛЬ (useCapture = true)
+    // Это позволяет перехватить нажатие ДО того, как сайт его заблокирует
+    window.addEventListener('keydown', async (e) => {
+        // Проверка: Alt + S
+        if (e.altKey === USE_ALT_KEY && (e.code === HOTKEY_CODE || e.key === 's' || e.key === 'S' || e.key === 'ы' || e.key === 'Ы')) {
+            console.log('🕵️ Hotkey detected!');
+            e.preventDefault(); // Запрещаем сайту реагировать
+            e.stopPropagation(); // Останавливаем других слушателей
+            await solveAll();
+        }
+    }, true); // <--- ВАЖНО: true включает режим перехвата
 
-    document.addEventListener('click', async (e) => {
+    // Точечное решение (Alt + Click)
+    window.addEventListener('click', async (e) => {
         if (e.altKey) {
             const table = e.target.closest('table.question');
             if (table) {
@@ -284,6 +293,13 @@ function init() {
             }
         }
     }, true);
+    
+    // РЕЗЕРВНЫЙ ЗАПУСК ЧЕРЕЗ КОНСОЛЬ
+    // Теперь можно написать в консоли: start() и нажать Enter
+    window.start = async () => {
+        console.log('🚀 Manual start via console...');
+        await solveAll();
+    };
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
