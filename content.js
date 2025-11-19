@@ -1,18 +1,15 @@
 // --- CONFIG ---
 const MODEL_HIERARCHY = [
-    'gemini-2.5-pro',    // Основная
-    'gemini-2.5-flash'   // Резервная
+    'gemini-2.5-pro',    // Основная (Smart, 2 RPM)
+    'gemini-2.5-flash'   // Резервная (Fast, 15 RPM)
 ];
 
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini'];
-
+const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
 const HOTKEY_CODE = 'KeyS';     
 const USE_ALT_KEY = true;       
-const MARKER_COLOR = '#cccccc'; // Цвет точки
+const MARKER_COLOR = '#cccccc'; 
 
-console.log(`%c🚀 AI Helper: Right-Aligned Markers`, "color: #fff; background: #009688; padding: 5px; font-weight: bold;");
+console.log(`%c🚀 AI Helper: Gemini 2.5 Only (Stealth Mode)`, "color: #fff; background: #4caf50; padding: 5px; font-weight: bold;");
 
 // --- UI ---
 let statusIndicator = null;
@@ -116,13 +113,17 @@ function extractQuestions() {
     return questions;
 }
 
-// --- GEMINI ---
+// --- API CLIENT (GEMINI) ---
 async function askGemini(question, apiKey) {
     const parts = [];
+    
+    // Images from Question
     for (const url of question.images) {
         const img = await processImageSource(url);
         if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.base64 } });
     }
+
+    // Options text + images
     let optionsText = "";
     let imgCounter = 0;
     for (const ans of question.answers) {
@@ -137,123 +138,107 @@ async function askGemini(question, apiKey) {
         }
         optionsText += "\n";
     }
-    const prompt = `Question: ${question.text}\nType: ${question.isMultiSelect ? 'Multi' : 'Single'}\nOptions:\n${optionsText}\nReturn JSON: {"correct": ["A"], "reason": "short explanation"}`;
+
+    const prompt = `
+Question: ${question.text}
+Type: ${question.isMultiSelect ? 'Multi-choice' : 'Single'}
+Options:
+${optionsText}
+
+Task:
+1. Select correct option(s).
+2. Provide a very short explanation (max 10 words) in Russian.
+
+Return JSON ONLY: 
+{"correct": ["A"], "reason": "explanation"}
+`;
     parts.unshift({ text: prompt });
 
-    // Logging
-    console.group(`❓ Q${question.number}`);
-    console.log(`📝 Prompt:`, prompt);
+    const requestBody = {
+        contents: [{ parts: parts }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
+    };
 
+    // === VISUAL LOGGING ===
+    console.group(`❓ Q${question.number}`);
+    console.log(`%c📝 Prompt:`, 'color: #2196F3;', prompt);
+    
+    const imageParts = requestBody.contents[0].parts.filter(p => p.inline_data);
+    if (imageParts.length > 0) {
+        console.groupCollapsed(`📸 Images (${imageParts.length})`);
+        imageParts.forEach((part) => {
+            const url = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
+            console.log('%c ', `font-size: 1px; padding: 50px; background: url('${url}') no-repeat center/contain;`);
+        });
+        console.groupEnd();
+    }
+
+    // --- TRY MODELS ---
     for (const model of MODEL_HIERARCHY) {
         try {
-            console.log(`📡 Gemini (${model})...`);
-            const response = await fetch(`${GEMINI_URL}${model}:generateContent?key=${apiKey}`, {
+            console.log(`📡 Sending to: %c${model}`, 'color: blue; font-weight: bold');
+            const response = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: parts }], generationConfig: { responseMimeType: "application/json" } })
+                body: JSON.stringify(requestBody)
             });
+
+            // Handle Limits (429) & Overload (503)
             if (response.status === 429 || response.status === 503) {
-                 console.warn(`⚠️ ${model} ${response.status}. Next...`); continue; 
+                 console.warn(`⚠️ ${model} status ${response.status}. Next...`);
+                 continue; 
             }
-            if (!response.ok) throw new Error(await response.text());
+
+            if (!response.ok) {
+                 const errTxt = await response.text();
+                 throw new Error(`API Error: ${errTxt}`);
+            }
+
             const data = await response.json();
             const result = JSON.parse(data.candidates[0].content.parts[0].text);
-            console.log(`✅ Result:`, result);
+            
+            console.log(`%c✅ Result:`, 'color: green; font-weight: bold;', result);
             console.groupEnd();
+            showStatus(`Solved via ${model}`, '#2e7d32');
             return result;
-        } catch (e) { console.error(e); }
+
+        } catch (e) {
+            console.error(`❌ Error ${model}:`, e);
+        }
     }
     console.groupEnd();
     return null;
 }
 
-// --- OPENAI ---
-async function askOpenAI(question, apiKey) {
-    const content = [];
-    let optionsText = "";
-    for (const ans of question.answers) {
-        optionsText += `${ans.id}. ${ans.text}`;
-        if(ans.imgSrc) optionsText += " [Image]";
-        optionsText += "\n";
-    }
-    content.push({ type: "text", text: `Question: ${question.text}\nType: ${question.isMultiSelect ? 'Multi' : 'Single'}\nOptions:\n${optionsText}\nReturn JSON: {"correct": ["A"], "reason": "short explanation"}` });
-    
-    const allImageUrls = [...question.images, ...question.answers.map(a => a.imgSrc).filter(src => src)];
-    for (const url of allImageUrls) {
-        const img = await processImageSource(url);
-        if (img) content.push({ type: "image_url", image_url: { url: `data:${img.mime};base64,${img.base64}` } });
-    }
-
-    console.group(`❓ Q${question.number} (OpenAI)`);
-    for (const model of OPENAI_MODELS) {
-        try {
-            console.log(`📡 GPT (${model})...`);
-            const response = await fetch(OPENAI_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                body: JSON.stringify({ model: model, messages: [{ role: "user", content: content }], response_format: { type: "json_object" } })
-            });
-            if (response.status === 429) continue;
-            if (!response.ok) throw new Error(await response.text());
-            const data = await response.json();
-            const result = JSON.parse(data.choices[0].message.content);
-            console.log(`✅ Result:`, result);
-            console.groupEnd();
-            return result;
-        } catch (e) { console.error(e); }
-    }
-    console.groupEnd();
-    return null;
-}
-
-// --- ROUTER ---
-async function askAI(question) {
-    const storage = await chrome.storage.sync.get(['aiProvider', 'geminiApiKey', 'openaiApiKey']);
-    const provider = storage.aiProvider || 'gemini';
-    
-    if (provider === 'openai') {
-        if (!storage.openaiApiKey) return alert('OpenAI Key missing');
-        const res = await askOpenAI(question, storage.openaiApiKey);
-        if (res) showStatus(`GPT Solved`, '#10a37f');
-        return res;
-    } else {
-        if (!storage.geminiApiKey) return alert('Gemini Key missing');
-        const res = await askGemini(question, storage.geminiApiKey);
-        if (res) showStatus(`Gemini Solved`, '#2e7d32');
-        return res;
-    }
-}
-
-// --- PROCESSOR ---
-async function processQuestion(q) {
+// --- SOLVER ---
+async function processQuestion(q, apiKey) {
     showStatus(`Thinking Q${q.number}...`, '#1976d2');
     q.domElement.style.opacity = '0.7';
 
     try {
-        const result = await askAI(q);
+        const result = await askGemini(q, apiKey);
         q.domElement.style.opacity = '1';
 
         if (result && result.correct.length > 0) {
             q.answers.forEach(ans => {
                 if (result.correct.includes(ans.id)) {
-                    // 1. Клик
+                    // 1. Click
                     if (!ans.element.checked) ans.element.click();
                     
-                    // 2. МАРКЕР (ИСПРАВЛЕНО: ТЕПЕРЬ СПРАВА)
+                    // 2. Marker (Right Aligned)
                     if (ans.textElement && !ans.textElement.innerHTML.includes('&bull;')) {
                         const m = document.createElement('span');
                         m.innerHTML = '&bull;'; 
                         m.style.color = MARKER_COLOR; 
                         
-                        // --- СТИЛИ ДЛЯ ПОЗИЦИИ СПРАВА ---
-                        m.style.float = 'right';      // Прижимаем вправо
-                        m.style.marginLeft = '10px';  // Отступ от текста
-                        m.style.fontSize = '18px';    // Чуть крупнее, чтобы было видно
+                        // Right Align Styles
+                        m.style.float = 'right';      
+                        m.style.marginLeft = '10px';  
+                        m.style.fontSize = '18px';    
                         m.style.cursor = 'help';
                         m.title = `AI: ${result.reason}`;
                         
-                        // Вставляем В НАЧАЛО (prepend), чтобы float:right сработал корректно
-                        // и точка улетела в правый угол ячейки на той же строке
+                        // Prepend to make float work correctly on same line
                         if (ans.textElement.firstChild) {
                             ans.textElement.insertBefore(m, ans.textElement.firstChild);
                         } else {
@@ -266,42 +251,47 @@ async function processQuestion(q) {
     } catch (e) {
         q.domElement.style.opacity = '1';
         showStatus(`Error Q${q.number}`, 'red');
-        console.error(e);
     }
 }
 
 async function solveAll() {
+    const storage = await chrome.storage.sync.get(['geminiApiKey']);
+    if (!storage.geminiApiKey) return alert('No API Key');
+
     const questions = extractQuestions();
     if (!questions.length) return;
-    console.log('🚀 Start All');
+    
+    console.group('🚀 START BATCH');
     for (let i = 0; i < questions.length; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 1000));
-        await processQuestion(questions[i]);
+        await processQuestion(questions[i], storage.geminiApiKey);
     }
+    console.groupEnd();
     showStatus('Done'); hideStatus();
 }
 
 // --- INIT ---
 function init() {
     unlockSite();
-    
-    // Hotkey Alt+S
-    window.addEventListener('keydown', async (e) => {
+
+    document.addEventListener('keydown', async (e) => {
         if (e.altKey === USE_ALT_KEY && (e.code === HOTKEY_CODE || e.key === 's' || e.key === 'S' || e.key === 'ы')) {
             e.preventDefault(); e.stopPropagation();
             await solveAll();
         }
     }, true);
 
-    // Alt+Click
-    window.addEventListener('click', async (e) => {
+    document.addEventListener('click', async (e) => {
         if (e.altKey) {
             const table = e.target.closest('table.question');
             if (table) {
                 e.preventDefault(); e.stopPropagation();
+                const storage = await chrome.storage.sync.get(['geminiApiKey']);
+                if (!storage.geminiApiKey) return alert('No API Key');
+
                 const allTables = Array.from(document.querySelectorAll('table.question'));
                 const q = parseQuestion(table, allTables.indexOf(table));
-                if (q) await processQuestion(q);
+                if (q) await processQuestion(q, storage.geminiApiKey);
             }
         }
     }, true);
