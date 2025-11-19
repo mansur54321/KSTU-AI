@@ -1,25 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "AI Test Helper (Gemini)",
-  "version": "2.0",
-  "description": "Помощник для прохождения тестов с использованием Google Gemini AI",
+  "name": "AI Test Solver (Gemini 2.5)",
+  "version": "2.5",
+  "description": "Автоматическое решение тестов с помощью Google Gemini 3.0 Pro",
   "permissions": [
-    "activeTab",
     "storage"
   ],
   "host_permissions": [
     "https://univer.kstu.kz/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "<all_urls>"
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
-    },
-    "default_title": "AI Test Helper - Gemini"
-  },
   "content_scripts": [
     {
       "matches": [
@@ -27,16 +18,18 @@
         "file:///*"
       ],
       "js": ["content.js"],
-      "css": ["styles.css"],
-      "run_at": "document_idle"
+      "css": ["styles.css"]
     }
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   }
 }
