@@ -1,31 +1,24 @@
-// Добавление кнопки на страницу
-function addSolveButton() {
-  // Проверяем существование кнопки
-  if (document.getElementById('ai-solve-button')) {
-    console.log('Кнопка уже существует');
-    return;
-  }
+// --- CONFIG ---
+const GEMINI_MODEL = 'gemini-2.5-pro'; 
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-  // Ищем контейнер для кнопки (более универсальный поиск)
+console.log(`%c🚀 AI Helper Запущен! Модель: ${GEMINI_MODEL}`, "color: #fff; background: #7928CA; padding: 5px; font-weight: bold; border-radius: 5px;");
+
+// Добавление кнопки
+function addSolveButton() {
+  const oldButton = document.getElementById('ai-solve-button');
+  if (oldButton) oldButton.remove();
+
   let buttonsDiv = document.querySelector('.buttons');
   
-  // Если не найден стандартный контейнер, создаем свой
   if (!buttonsDiv) {
-    console.log('Стандартный контейнер не найден, ищем альтернативные места...');
-    
-    // Пытаемся найти форму или любой контейнер с вопросами
     const questionTable = document.querySelector('table.question');
     if (questionTable) {
-      // Создаем контейнер для кнопки
       buttonsDiv = document.createElement('div');
       buttonsDiv.className = 'buttons ai-buttons-container';
       buttonsDiv.style.cssText = 'margin: 20px; padding: 10px; text-align: center;';
-      
-      // Вставляем перед первым вопросом
       questionTable.parentElement.insertBefore(buttonsDiv, questionTable);
-      console.log('✅ Создан новый контейнер для кнопки');
     } else {
-      console.log('Не найдены вопросы на странице, пробуем через 1 секунду...');
       setTimeout(addSolveButton, 1000);
       return;
     }
@@ -35,36 +28,86 @@ function addSolveButton() {
   solveButton.type = 'button';
   solveButton.id = 'ai-solve-button';
   solveButton.className = 'submitButton ai-button';
-  solveButton.value = '🤖 Получить ответы (Gemini)';
+  solveButton.value = '⚡ Gemini 2.5 Pro: DEBUG MODE';
+  
+  solveButton.style.cssText = `
+    background: linear-gradient(135deg, #212121 0%, #424242 100%);
+    color: #00e676;
+    border: 2px solid #00e676;
+    padding: 10px 20px;
+    font-weight: bold;
+    font-family: monospace;
+    cursor: pointer;
+    margin-right: 10px;
+    border-radius: 5px;
+    box-shadow: 0 4px 10px rgba(0, 230, 118, 0.2);
+    transition: all 0.3s;
+  `;
+  
+  solveButton.onmouseover = () => solveButton.style.transform = 'translateY(-2px)';
+  solveButton.onmouseout = () => solveButton.style.transform = 'translateY(0)';
   
   buttonsDiv.insertBefore(solveButton, buttonsDiv.firstChild);
-  console.log('✅ Кнопка AI добавлена');
+  console.log('✅ Кнопка добавлена в интерфейс');
 
   solveButton.addEventListener('click', async () => {
+    console.clear(); // Очищаем консоль перед новым запуском
+    console.log('🎬 ЗАПУСК ОБРАБОТКИ ТЕСТА...');
     await solveQuestions();
   });
 }
 
-// Извлечение вопросов со страницы
+// Обработка картинок
+async function urlToGenerativePart(url) {
+  try {
+    if (url.startsWith('file://')) {
+        console.warn(`⚠️ Пропуск локальной картинки: ${url}`);
+        return null; 
+    }
+    
+    console.log(`📥 Загрузка изображения: ${url.substring(0, 50)}...`);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Ошибка HTTP ${response.status}`);
+    
+    const blob = await response.blob();
+    const base64Data = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+
+    const base64Content = base64Data.split(',')[1];
+    const mimeType = base64Data.substring(base64Data.indexOf(':') + 1, base64Data.indexOf(';'));
+
+    return {
+      inline_data: {
+        mime_type: mimeType,
+        data: base64Content
+      }
+    };
+  } catch (error) {
+    console.error('❌ Ошибка обработки картинки:', error);
+    return null;
+  }
+}
+
+// Парсинг вопросов
 function extractQuestions() {
+  console.group('🔍 Сканирование страницы...');
   const questions = [];
   const questionTables = document.querySelectorAll('table.question');
+
+  console.log(`Найдено блоков с вопросами: ${questionTables.length}`);
 
   questionTables.forEach((questionTable, index) => {
     const questionTextElement = questionTable.querySelector('.text');
     if (!questionTextElement) return;
 
-    let questionText = questionTextElement.innerText.trim();
+    let questionText = questionTextElement.innerText.replace(/\s+/g, ' ').trim();
     
-    // Извлекаем все изображения из вопроса
-    const images = questionTextElement.querySelectorAll('img');
-    const imageUrls = [];
-    
-    images.forEach((img, imgIndex) => {
-      const src = img.src;
-      const alt = img.alt || `Image ${imgIndex + 1}`;
-      imageUrls.push({ src, alt });
-      console.log(`📷 Найдено изображение в вопросе ${index + 1}:`, src);
+    const images = [];
+    questionTextElement.querySelectorAll('img').forEach(img => {
+      if (img.src) images.push(img.src);
     });
 
     const answerTable = questionTable.nextElementSibling;
@@ -75,407 +118,185 @@ function extractQuestions() {
 
     const answerRows = answerTable.querySelectorAll('tr');
     answerRows.forEach(row => {
-      const label = row.querySelector('.num')?.innerText.trim();
-      const text = row.querySelector('.text')?.innerText.trim();
+      const labelElement = row.querySelector('.num');
+      const textElement = row.querySelector('.text');
       const input = row.querySelector('input');
       
-      if (label && text && input) {
+      if (labelElement && input) {
         answers.push({
-          label: label.replace('.', ''),
-          text: text,
-          value: input.value,
+          id: labelElement.innerText.replace('.', '').trim(),
+          text: textElement ? textElement.innerText.trim() : 'Без текста',
           element: input
         });
       }
     });
 
-    questions.push({
+    const qObj = {
       number: index + 1,
-      question: questionText,
-      images: imageUrls,
+      text: questionText,
+      images: images,
       answers: answers,
-      type: questionType,
-      answerTable: answerTable
-    });
+      isMultiSelect: questionType === '2'
+    };
+    
+    questions.push(qObj);
+    console.log(`Вопрос #${index + 1} (${qObj.isMultiSelect ? 'Multi' : 'Single'}):`, qObj.text.substring(0, 50) + '...');
   });
 
+  console.groupEnd();
   return questions;
 }
 
-// Отправка запроса к Google Gemini API
-async function askGemini(question, apiKey, retries = 3) {
-  // Формируем промпт с информацией об изображениях
-  let imageInfo = '';
-  if (question.images && question.images.length > 0) {
-    imageInfo = '\n\nВ ВОПРОСЕ ЕСТЬ ИЗОБРАЖЕНИЕ(Я):\n';
-    question.images.forEach((img, idx) => {
-      imageInfo += `Изображение ${idx + 1}: ${img.alt || 'без описания'}\n`;
-      imageInfo += `URL: ${img.src}\n`;
-    });
-    imageInfo += '\nПОЖАЛУЙСТА, учти наличие изображений при ответе на вопрос.\n';
-  }
-
-  const prompt = `Ты эксперт по программированию и компьютерным наукам. Проанализируй вопрос и выбери правильный ответ.
-
-Вопрос: ${question.question}${imageInfo}
-
-Варианты ответов:
-${question.answers.map(a => `${a.label}. ${a.text}`).join('\n')}
-
-${question.type === '2' ? 'Это вопрос с множественным выбором - можно выбрать несколько правильных ответов.' : 'Это вопрос с одним правильным ответом.'}
-
-ВАЖНО: Верни ТОЛЬКО букву (или буквы через запятую для множественного выбора) правильного ответа. 
-Например: A или A,C,D
-Не добавляй никаких пояснений, только буквы.`;
-
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      console.log(`🔄 Попытка ${attempt + 1}/${retries} для вопроса ${question.number} через Gemini`);
-      
-      // Если есть изображения, пытаемся использовать Vision API
-      const useVision = question.images && question.images.length > 0;
-      
-      if (useVision) {
-        console.log('📷 Вопрос содержит изображения, используем Gemini Vision...');
-      }
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      // Формируем тело запроса
-      let requestBody;
-      
-      if (useVision && question.images.length > 0) {
-        // Для изображений используем multimodal запрос
-        const parts = [
-          { text: prompt }
-        ];
-        
-        // Добавляем изображения (если они доступны)
-        // Примечание: для base64 изображений нужно их предварительно загрузить
-        // Пока просто отправляем текстовый запрос с описанием изображений
-        
-        requestBody = {
-          contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 20,
-            topP: 0.8,
-            maxOutputTokens: 100,
-          }
-        };
-      } else {
-        // Обычный текстовый запрос
-        requestBody = {
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 20,
-            topP: 0.8,
-            maxOutputTokens: 100,
-          }
-        };
-      }
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      console.log(`📡 Получен ответ со статусом: ${response.status}`);
-
-      if (response.status === 429) {
-        const retryAfter = 10 + (attempt * 5);
-        console.log(`⏳ Rate limit (429). Ожидание ${retryAfter}с`);
-        
-        if (attempt < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-          continue;
-        }
-        throw new Error('❌ Превышен лимит запросов Gemini API.\n💡 Подождите несколько минут и попробуйте снова.');
-      }
-
-      if (response.status === 400) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Ошибка 400:', errorData);
-        throw new Error('❌ Неверный запрос к Gemini API.\n💡 Проверьте API ключ в настройках.');
-      }
-
-      if (response.status === 403) {
-        throw new Error('❌ API ключ недействителен или не имеет доступа.\n💡 Получите новый ключ: https://aistudio.google.com/app/apikey');
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ API Error:', errorData);
-        throw new Error(`❌ Ошибка Gemini API: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ Ответ получен:', data);
-      
-      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
-        console.error('❌ Неожиданный формат ответа:', data);
-        
-        if (attempt < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
-        }
-        throw new Error('❌ Gemini не вернул корректный ответ');
-      }
-
-      const answer = data.candidates[0].content.parts[0].text.trim();
-      console.log(`💡 Gemini ответ: "${answer}"`);
-      
-      // Извлекаем буквы из ответа
-      const letters = answer.match(/[A-E]/gi);
-      if (!letters || letters.length === 0) {
-        console.warn('⚠️ Не найдены буквы в ответе');
-        
-        if (attempt < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
-        }
-        return ['A']; // Возвращаем A по умолчанию
-      }
-      
-      const result = [...new Set(letters.map(l => l.toUpperCase()))]; // Убираем дубликаты
-      console.log(`✅ Распознанные ответы: ${result.join(', ')}`);
-      return result;
-      
-    } catch (error) {
-      console.error(`❌ Ошибка на попытке ${attempt + 1}:`, error);
-      
-      if (error.name === 'AbortError') {
-        console.error('⏱️ Таймаут запроса (30 секунд)');
-        if (attempt < retries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
-        }
-        throw new Error('❌ Превышено время ожидания ответа от Gemini.\n💡 Проверьте интернет соединение.');
-      }
-      
-      if (attempt === retries - 1) {
-        throw error;
-      }
-      
-      // Если это известная ошибка, не повторяем
-      if (error.message.includes('API ключ') || 
-          error.message.includes('не имеет доступа')) {
-        throw error;
-      }
-      
-      const waitTime = Math.pow(2, attempt) * 2;
-      console.log(`⚠️ Ожидание ${waitTime} секунд перед повтором...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-    }
-  }
+// API запрос
+async function askGemini(question, apiKey) {
+  // Группируем логи для каждого вопроса отдельно
+  console.groupCollapsed(`🧠 AI Request: Вопрос ${question.number}`);
   
-  throw new Error('❌ Не удалось получить ответ после всех попыток');
-}
+  const promptText = `
+Ты решаешь тест.
+ВОПРОС: ${question.text}
+${question.isMultiSelect ? '(Выбери ВСЕ верные варианты)' : '(Выбери ОДИН верный вариант)'}
 
-// Подсветка правильных ответов
-function highlightAnswers(question, correctLetters) {
-  question.answers.forEach(answer => {
-    const row = answer.element.closest('tr');
-    if (!row) return;
+ВАРИАНТЫ:
+${question.answers.map(a => `${a.id}. ${a.text}`).join('\n')}
 
-    if (correctLetters.includes(answer.label)) {
-      row.classList.add('ai-correct-answer');
-      if (!answer.element.checked) {
-        answer.element.checked = true;
-      }
-    } else {
-      row.classList.remove('ai-correct-answer');
+ВЕРНИ ТОЛЬКО JSON:
+{"correct": ["A"]} или {"correct": ["A", "C"]}
+`;
+
+  console.log('%c📝 Сформированный промпт:', 'color: #29b6f6', promptText);
+
+  const parts = [{ text: promptText }];
+
+  if (question.images && question.images.length > 0) {
+    console.log(`📷 Прикреплено изображений: ${question.images.length}`);
+    for (const imgUrl of question.images) {
+      const part = await urlToGenerativePart(imgUrl);
+      if (part) parts.push(part);
     }
-  });
+  }
+
+  try {
+    console.log(`📡 Отправка запроса к ${GEMINI_MODEL}...`);
+    const startTime = Date.now();
+
+    const response = await fetch(`${API_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: parts }],
+        generationConfig: { 
+            responseMimeType: "application/json",
+            temperature: 0.0 
+        }
+      })
+    });
+
+    const duration = Date.now() - startTime;
+    console.log(`⏱️ Время ответа: ${duration}ms`);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Ошибка сервера:', response.status, errorText);
+        console.groupEnd();
+        throw new Error(`API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // Логируем сырой ответ от нейронки (очень полезно для отладки)
+    console.log('📥 Raw Response from Gemini:', data);
+
+    const resultText = data.candidates[0].content.parts[0].text;
+    console.log('%c💡 Текстовый ответ модели:', 'color: #66bb6a', resultText);
+
+    const result = JSON.parse(resultText);
+    console.log('✅ Распаршенный JSON:', result);
+    
+    console.groupEnd(); // Закрываем группу
+    return result.correct || [];
+
+  } catch (error) {
+    console.error('❌ Исключение в функции askGemini:', error);
+    console.groupEnd();
+    throw error;
+  }
 }
 
-// Основная функция решения
+// Основной цикл
 async function solveQuestions() {
   const button = document.getElementById('ai-solve-button');
   const originalValue = button.value;
   
-  try {
-    // Получаем API ключ из настроек
-    const result = await chrome.storage.sync.get(['geminiApiKey']);
-    const apiKey = result.geminiApiKey;
+  const storage = await chrome.storage.sync.get(['geminiApiKey']);
+  if (!storage.geminiApiKey) {
+    console.warn('⚠️ API Key не найден');
+    alert('⚙️ Нет ключа! Установите в настройках расширения.');
+    return;
+  }
 
-    if (!apiKey) {
-      alert('⚠️ Пожалуйста, установите Gemini API ключ в настройках расширения.\n\n' +
-            '1. Откройте настройки расширения\n' +
-            '2. Получите бесплатный ключ: https://aistudio.google.com/app/apikey\n' +
-            '3. Вставьте ключ и сохраните');
-      return;
-    }
+  const questions = extractQuestions();
+  if (questions.length === 0) {
+    console.error('❌ Вопросы не извлечены');
+    alert('❌ Вопросы не найдены');
+    return;
+  }
 
-    button.value = '⏳ Обработка...';
-    button.disabled = true;
+  button.disabled = true;
+  let successCount = 0;
+  let errorCount = 0;
 
-    const questions = extractQuestions();
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    button.value = `🤔 Думаю над вопросом ${i + 1}/${questions.length}...`;
     
-    if (questions.length === 0) {
-      alert('❌ Вопросы не найдены на странице');
-      button.value = originalValue;
-      button.disabled = false;
-      return;
-    }
+    if (i > 0) await new Promise(r => setTimeout(r, 1500));
 
-    console.log(`📝 Начинаем обработку ${questions.length} вопросов через Gemini...`);
+    try {
+        const correctIds = await askGemini(q, storage.geminiApiKey);
 
-    let successCount = 0;
-    let errorCount = 0;
-    const startTime = Date.now();
-    
-    for (let i = 0; i < questions.length; i++) {
-      const question = questions[i];
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      button.value = `⏳ ${i + 1}/${questions.length} (✓${successCount} ✗${errorCount}) [${elapsed}s]`;
-
-      console.log(`\n${'='.repeat(50)}`);
-      console.log(`📌 Обработка вопроса ${i + 1}/${questions.length}`);
-      console.log(`Вопрос: ${question.question.substring(0, 100)}...`);
-      
-      if (question.images && question.images.length > 0) {
-        console.log(`📷 Изображений в вопросе: ${question.images.length}`);
-        question.images.forEach((img, idx) => {
-          console.log(`  ${idx + 1}. ${img.alt || 'Без описания'}`);
-          console.log(`     URL: ${img.src}`);
-        });
-      }
-
-      try {
-        const correctLetters = await askGemini(question, apiKey);
-        console.log(`✅ Правильные ответы: ${correctLetters.join(', ')}`);
-        
-        highlightAnswers(question, correctLetters);
-        successCount++;
-        
-        console.log(`✅ Вопрос ${i + 1} обработан успешно`);
-        
-        // Задержка между запросами (для бесплатного tier: 15 запросов/минуту = 4 секунды)
-        if (i < questions.length - 1) {
-          const delay = 4000;
-          for (let sec = 4; sec > 0; sec--) {
-            button.value = `⏳ Ожидание ${sec}с... (${i + 1}/${questions.length}) [${elapsed}s]`;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-      } catch (error) {
-        console.error(`\n❌ ОШИБКА при обработке вопроса ${i + 1}:`, error);
-        errorCount++;
-        
-        const errorMsg = error.message || 'Неизвестная ошибка';
-        
-        // Если ошибка связана с ключом - останавливаемся
-        if (errorMsg.includes('API ключ') || errorMsg.includes('не имеет доступа')) {
-          alert(errorMsg);
-          break;
-        }
-        
-        // Для rate limit - предлагаем продолжить
-        if (errorMsg.includes('лимит')) {
-          const continueProcessing = confirm(
-            `${errorMsg}\n\n` +
-            `Обработано: ${successCount}/${questions.length}\n` +
-            `Ошибок: ${errorCount}\n\n` +
-            `Продолжить с задержкой 60 секунд?`
-          );
-          
-          if (continueProcessing) {
-            for (let sec = 60; sec > 0; sec--) {
-              button.value = `⏳ Ожидание ${sec}с...`;
-              await new Promise(resolve => setTimeout(resolve, 1000));
+        if (correctIds.length > 0) {
+          successCount++;
+          q.answers.forEach(ans => {
+            if (correctIds.includes(ans.id)) {
+              console.log(`✏️ Выбор ответа на странице: %c${ans.id}`, 'font-weight:bold; color:blue;');
+              if (!ans.element.checked) ans.element.click();
+              
+              const row = ans.element.closest('tr');
+              if (row) {
+                  row.style.backgroundColor = '#e8f5e9';
+                  row.style.borderLeft = '5px solid #4caf50';
+                  row.style.transition = 'background 0.5s';
+              }
             }
-            continue;
-          } else {
-            break;
-          }
+          });
         } else {
-          // Для других ошибок
-          const continueProcessing = confirm(
-            `❌ Ошибка на вопросе ${i + 1}\n\n` +
-            `${errorMsg.split('\n')[0]}\n\n` +
-            `Обработано: ${successCount}/${questions.length}\n` +
-            `Продолжить?`
-          );
-          
-          if (!continueProcessing) {
-            break;
-          }
+            console.warn(`⚠️ Модель вернула пустой список ответов для вопроса ${q.number}`);
         }
-      }
+    } catch (e) {
+        errorCount++;
+        console.error(`🔥 Критическая ошибка на вопросе ${i+1}:`, e);
+        // Визуально помечаем ошибку на странице
+        const qTable = document.querySelectorAll('table.question')[i];
+        if(qTable) qTable.style.border = "2px solid red";
+        
+        if (e.message.includes('404')) {
+            alert(`Модель ${GEMINI_MODEL} недоступна!`);
+            break;
+        }
     }
+  }
 
-    // Финальное сообщение
-    const totalTime = Math.floor((Date.now() - startTime) / 1000);
-    console.log(`\n${'='.repeat(50)}`);
-    console.log('🏁 ОБРАБОТКА ЗАВЕРШЕНА');
-    console.log(`✅ Успешно: ${successCount}/${questions.length}`);
-    console.log(`❌ Ошибок: ${errorCount}`);
-    console.log(`⏱️ Время: ${totalTime}с (${Math.floor(totalTime / 60)}м ${totalTime % 60}с)`);
-    console.log(`${'='.repeat(50)}\n`);
-    
-    if (successCount > 0) {
-      button.value = `✅ Готово: ${successCount}/${questions.length} [${totalTime}s]`;
-      if (successCount === questions.length) {
-        setTimeout(() => {
-          alert(
-            `🎉 Все вопросы обработаны!\n\n` +
-            `✓ Успешно: ${successCount}\n` +
-            `✗ Ошибок: ${errorCount}\n` +
-            `⏱️ Время: ${Math.floor(totalTime / 60)}м ${totalTime % 60}с`
-          );
-        }, 500);
-      }
-    } else {
-      button.value = '❌ Ошибка';
-      console.error('❌ Ни один вопрос не был обработан успешно');
-    }
-    
-    setTimeout(() => {
-      button.value = originalValue;
-      button.disabled = false;
-    }, 3000);
-
-  } catch (error) {
-    console.error('Error:', error);
-    alert(`❌ Произошла ошибка: ${error.message}`);
+  console.log(`%c🏁 ОБРАБОТКА ЗАВЕРШЕНА. Успешно: ${successCount}, Ошибок: ${errorCount}`, "font-size: 14px; font-weight: bold;");
+  
+  button.value = `✅ Готово: ${successCount}/${questions.length}`;
+  setTimeout(() => {
     button.value = originalValue;
     button.disabled = false;
-  }
-}
-
-// Инициализация при загрузке страницы
-function init() {
-  console.log('🚀 Инициализация AI Test Helper (Gemini)...');
-  addSolveButton();
+  }, 3000);
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', addSolveButton);
 } else {
-  init();
+  addSolveButton();
 }
-
-// Наблюдатель за изменениями DOM (на случай динамической загрузки)
-const observer = new MutationObserver(() => {
-  if (!document.getElementById('ai-solve-button')) {
-    addSolveButton();
-  }
-});
-
-observer.observe(document.body, {
-  childList: true,
-  subtree: true
-});
