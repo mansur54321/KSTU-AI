@@ -1,302 +1,290 @@
 // --- CONFIG ---
-const GEMINI_MODEL = 'gemini-2.5-pro'; 
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// ТОЛЬКО СЕРИЯ 2.5
+const MODEL_HIERARCHY = [
+    'gemini-2.5-pro',    // Основная (Smart)
+    'gemini-2.5-flash'   // Резервная (Fast)
+];
 
-console.log(`%c🚀 AI Helper Запущен! Модель: ${GEMINI_MODEL}`, "color: #fff; background: #7928CA; padding: 5px; font-weight: bold; border-radius: 5px;");
+const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
+const HOTKEY_CODE = 'KeyS';     
+const USE_ALT_KEY = true;       
+const MARKER_COLOR = '#cccccc'; 
 
-// Добавление кнопки
-function addSolveButton() {
-  const oldButton = document.getElementById('ai-solve-button');
-  if (oldButton) oldButton.remove();
+console.log(`%c🚀 AI Helper: GEMINI 2.5 ONLY (Debug + Unlocker)`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
 
-  let buttonsDiv = document.querySelector('.buttons');
-  
-  if (!buttonsDiv) {
-    const questionTable = document.querySelector('table.question');
-    if (questionTable) {
-      buttonsDiv = document.createElement('div');
-      buttonsDiv.className = 'buttons ai-buttons-container';
-      buttonsDiv.style.cssText = 'margin: 20px; padding: 10px; text-align: center;';
-      questionTable.parentElement.insertBefore(buttonsDiv, questionTable);
-    } else {
-      setTimeout(addSolveButton, 1000);
-      return;
+// --- UI ---
+let statusIndicator = null;
+function showStatus(msg, color = '#666') {
+    if (!statusIndicator) {
+        statusIndicator = document.createElement('div');
+        statusIndicator.style.cssText = `
+            position: fixed; bottom: 10px; right: 10px;
+            font-family: monospace; font-size: 11px;
+            color: #333; background: rgba(255,255,255,0.95);
+            padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px;
+            pointer-events: none; z-index: 99999; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        `;
+        document.body.appendChild(statusIndicator);
     }
-  }
+    statusIndicator.innerText = msg;
+    statusIndicator.style.color = color;
+    statusIndicator.style.display = 'block';
+}
+function hideStatus() { if (statusIndicator) setTimeout(() => { statusIndicator.style.display = 'none'; }, 4000); }
 
-  const solveButton = document.createElement('input');
-  solveButton.type = 'button';
-  solveButton.id = 'ai-solve-button';
-  solveButton.className = 'submitButton ai-button';
-  solveButton.value = '⚡ Gemini 2.5 Pro: DEBUG MODE';
-  
-  solveButton.style.cssText = `
-    background: linear-gradient(135deg, #212121 0%, #424242 100%);
-    color: #00e676;
-    border: 2px solid #00e676;
-    padding: 10px 20px;
-    font-weight: bold;
-    font-family: monospace;
-    cursor: pointer;
-    margin-right: 10px;
-    border-radius: 5px;
-    box-shadow: 0 4px 10px rgba(0, 230, 118, 0.2);
-    transition: all 0.3s;
-  `;
-  
-  solveButton.onmouseover = () => solveButton.style.transform = 'translateY(-2px)';
-  solveButton.onmouseout = () => solveButton.style.transform = 'translateY(0)';
-  
-  buttonsDiv.insertBefore(solveButton, buttonsDiv.firstChild);
-  console.log('✅ Кнопка добавлена в интерфейс');
-
-  solveButton.addEventListener('click', async () => {
-    console.clear(); // Очищаем консоль перед новым запуском
-    console.log('🎬 ЗАПУСК ОБРАБОТКИ ТЕСТА...');
-    await solveQuestions();
-  });
+// --- UNLOCKER ---
+function unlockSite() {
+    const events = ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup', 'keydown', 'keyup', 'dragstart'];
+    events.forEach(evt => window.addEventListener(evt, (e) => { e.stopPropagation(); }, true));
+    const style = document.createElement('style');
+    style.innerHTML = ' * { -webkit-user-select: text !important; -moz-user-select: text !important; user-select: text !important; pointer-events: auto !important; } ';
+    document.head.appendChild(style);
 }
 
-// Обработка картинок
-async function urlToGenerativePart(url) {
+// --- IMAGE HELPER ---
+async function processImageSource(url) {
   try {
-    if (url.startsWith('file://')) {
-        console.warn(`⚠️ Пропуск локальной картинки: ${url}`);
-        return null; 
+    if (!url) return null;
+    if (url.startsWith('data:')) {
+        const commaIdx = url.indexOf(',');
+        if (commaIdx === -1) return null;
+        const meta = url.substring(0, commaIdx);
+        const mimeType = (meta.match(/data:([^;]+);/) || [])[1] || 'image/jpeg';
+        return { inline_data: { mime_type: mimeType, data: url.substring(commaIdx + 1) } };
     }
-    
-    console.log(`📥 Загрузка изображения: ${url.substring(0, 50)}...`);
+    if (url.startsWith('file://')) return null;
+
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Ошибка HTTP ${response.status}`);
-    
+    if (!response.ok) throw new Error('Img Fetch Error');
     const blob = await response.blob();
     const base64Data = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
       reader.readAsDataURL(blob);
     });
-
-    const base64Content = base64Data.split(',')[1];
-    const mimeType = base64Data.substring(base64Data.indexOf(':') + 1, base64Data.indexOf(';'));
-
     return {
       inline_data: {
-        mime_type: mimeType,
-        data: base64Content
+        mime_type: base64Data.substring(base64Data.indexOf(':') + 1, base64Data.indexOf(';')),
+        data: base64Data.split(',')[1]
       }
     };
-  } catch (error) {
-    console.error('❌ Ошибка обработки картинки:', error);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
-// Парсинг вопросов
-function extractQuestions() {
-  console.group('🔍 Сканирование страницы...');
-  const questions = [];
-  const questionTables = document.querySelectorAll('table.question');
-
-  console.log(`Найдено блоков с вопросами: ${questionTables.length}`);
-
-  questionTables.forEach((questionTable, index) => {
-    const questionTextElement = questionTable.querySelector('.text');
-    if (!questionTextElement) return;
-
-    let questionText = questionTextElement.innerText.replace(/\s+/g, ' ').trim();
+// --- PARSER ---
+function parseQuestion(table, index) {
+    const textElem = table.querySelector('.text');
+    if (!textElem) return null;
     
-    const images = [];
-    questionTextElement.querySelectorAll('img').forEach(img => {
-      if (img.src) images.push(img.src);
-    });
+    const qImages = [];
+    textElem.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
 
-    const answerTable = questionTable.nextElementSibling;
-    if (!answerTable || !answerTable.classList.contains('answer')) return;
-
-    const questionType = answerTable.dataset.qtype;
+    const answerTable = table.nextElementSibling;
+    if (!answerTable || !answerTable.classList.contains('answer')) return null;
+    
     const answers = [];
-
-    const answerRows = answerTable.querySelectorAll('tr');
-    answerRows.forEach(row => {
-      const labelElement = row.querySelector('.num');
-      const textElement = row.querySelector('.text');
+    answerTable.querySelectorAll('tr').forEach(row => {
+      const label = row.querySelector('.num');
+      const textDiv = row.querySelector('.text');
       const input = row.querySelector('input');
-      
-      if (labelElement && input) {
+      if (label && input) {
+        let ansText = textDiv ? textDiv.innerText.trim() : '';
+        let ansImgSrc = null;
+        if (textDiv) { const img = textDiv.querySelector('img'); if (img) ansImgSrc = img.src; }
+
         answers.push({
-          id: labelElement.innerText.replace('.', '').trim(),
-          text: textElement ? textElement.innerText.trim() : 'Без текста',
-          element: input
+          id: label.innerText.replace('.', '').trim(),
+          text: ansText, imgSrc: ansImgSrc, element: input, textElement: textDiv
         });
       }
     });
-
-    const qObj = {
-      number: index + 1,
-      text: questionText,
-      images: images,
-      answers: answers,
-      isMultiSelect: questionType === '2'
-    };
     
-    questions.push(qObj);
-    console.log(`Вопрос #${index + 1} (${qObj.isMultiSelect ? 'Multi' : 'Single'}):`, qObj.text.substring(0, 50) + '...');
-  });
+    return {
+      number: index + 1, 
+      text: textElem.innerText.trim(),
+      images: qImages, 
+      answers: answers, 
+      isMultiSelect: answerTable.dataset.qtype === '2',
+      domElement: table
+    };
+}
 
-  console.groupEnd();
+function extractQuestions() {
+  const questions = [];
+  document.querySelectorAll('table.question').forEach((table, index) => {
+      const q = parseQuestion(table, index);
+      if (q) questions.push(q);
+  });
   return questions;
 }
 
-// API запрос
+// --- API CLIENT ---
 async function askGemini(question, apiKey) {
-  // Группируем логи для каждого вопроса отдельно
-  console.groupCollapsed(`🧠 AI Request: Вопрос ${question.number}`);
-  
+  const parts = [];
+  let imgCount = 0;
+
+  if (question.images.length) {
+    for (const url of question.images) {
+        const p = await processImageSource(url);
+        if(p) { parts.push(p); imgCount++; }
+    }
+  }
+
+  let optionsText = "";
+  for (const ans of question.answers) {
+      let line = `${ans.id}. ${ans.text}`;
+      if (ans.imgSrc) {
+          const p = await processImageSource(ans.imgSrc);
+          if (p) { parts.push(p); imgCount++; line += ` [Image #${imgCount}]`; }
+      }
+      optionsText += line + "\n";
+  }
+
   const promptText = `
-Ты решаешь тест.
-ВОПРОС: ${question.text}
-${question.isMultiSelect ? '(Выбери ВСЕ верные варианты)' : '(Выбери ОДИН верный вариант)'}
+Question: ${question.text}
+Type: ${question.isMultiSelect ? 'Multi-choice' : 'Single-choice'}
+Options:
+${optionsText}
 
-ВАРИАНТЫ:
-${question.answers.map(a => `${a.id}. ${a.text}`).join('\n')}
+Task:
+1. Select correct option(s).
+2. Provide a very short explanation (max 10 words) in Russian.
 
-ВЕРНИ ТОЛЬКО JSON:
-{"correct": ["A"]} или {"correct": ["A", "C"]}
+Return JSON ONLY: 
+{"correct": ["A"], "reason": "Explanation"}
 `;
+  parts.unshift({ text: promptText });
 
-  console.log('%c📝 Сформированный промпт:', 'color: #29b6f6', promptText);
+  const requestBody = {
+    contents: [{ parts: parts }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
+  };
 
-  const parts = [{ text: promptText }];
-
-  if (question.images && question.images.length > 0) {
-    console.log(`📷 Прикреплено изображений: ${question.images.length}`);
-    for (const imgUrl of question.images) {
-      const part = await urlToGenerativePart(imgUrl);
-      if (part) parts.push(part);
-    }
+  // === DEBUG LOGGING ===
+  console.group(`❓ ВОПРОС №${question.number}`);
+  console.log(`%c📝 PROMPT:`, 'color: #2196F3;', promptText);
+  
+  const imageParts = requestBody.contents[0].parts.filter(p => p.inline_data);
+  if (imageParts.length > 0) {
+      console.groupCollapsed(`📸 IMAGES (${imageParts.length})`);
+      imageParts.forEach((part, idx) => {
+          const url = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
+          console.log('%c ', `font-size: 1px; padding: 50px; background: url('${url}') no-repeat center/contain;`);
+      });
+      console.groupEnd();
   }
 
-  try {
-    console.log(`📡 Отправка запроса к ${GEMINI_MODEL}...`);
-    const startTime = Date.now();
+  // --- TRY MODELS ---
+  for (const model of MODEL_HIERARCHY) {
+      try {
+        console.log(`📡 Requesting: %c${model}`, 'color: blue; font-weight: bold');
+        const response = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
 
-    const response = await fetch(`${API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: parts }],
-        generationConfig: { 
-            responseMimeType: "application/json",
-            temperature: 0.0 
+        // HANDLE 429 (Limit) & 503 (Overload)
+        if (response.status === 429 || response.status === 503) {
+            console.warn(`⚠️ ${model} Status ${response.status}. Switching...`);
+            continue; 
         }
-      })
-    });
 
-    const duration = Date.now() - startTime;
-    console.log(`⏱️ Время ответа: ${duration}ms`);
+        if (!response.ok) {
+             const errTxt = await response.text();
+             throw new Error(`API ${response.status}: ${errTxt}`);
+        }
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Ошибка сервера:', response.status, errorText);
+        const data = await response.json();
+        console.log(`%c📥 RAW:`, 'color: #999', data);
+
+        const result = JSON.parse(data.candidates[0].content.parts[0].text);
+        console.log(`%c✅ RESULT (${model}):`, 'color: green; font-weight: bold;', result);
+        
         console.groupEnd();
-        throw new Error(`API Error: ${response.status}`);
-    }
+        showStatus(`Solved via ${model}`, '#2e7d32');
+        return result;
 
-    const data = await response.json();
-    // Логируем сырой ответ от нейронки (очень полезно для отладки)
-    console.log('📥 Raw Response from Gemini:', data);
-
-    const resultText = data.candidates[0].content.parts[0].text;
-    console.log('%c💡 Текстовый ответ модели:', 'color: #66bb6a', resultText);
-
-    const result = JSON.parse(resultText);
-    console.log('✅ Распаршенный JSON:', result);
-    
-    console.groupEnd(); // Закрываем группу
-    return result.correct || [];
-
-  } catch (error) {
-    console.error('❌ Исключение в функции askGemini:', error);
-    console.groupEnd();
-    throw error;
+      } catch (e) {
+          console.error(`❌ Error ${model}:`, e);
+      }
   }
+  
+  console.error("ALL MODELS FAILED");
+  console.groupEnd();
+  return null;
 }
 
-// Основной цикл
-async function solveQuestions() {
-  const button = document.getElementById('ai-solve-button');
-  const originalValue = button.value;
-  
-  const storage = await chrome.storage.sync.get(['geminiApiKey']);
-  if (!storage.geminiApiKey) {
-    console.warn('⚠️ API Key не найден');
-    alert('⚙️ Нет ключа! Установите в настройках расширения.');
-    return;
-  }
-
-  const questions = extractQuestions();
-  if (questions.length === 0) {
-    console.error('❌ Вопросы не извлечены');
-    alert('❌ Вопросы не найдены');
-    return;
-  }
-
-  button.disabled = true;
-  let successCount = 0;
-  let errorCount = 0;
-
-  for (let i = 0; i < questions.length; i++) {
-    const q = questions[i];
-    button.value = `🤔 Думаю над вопросом ${i + 1}/${questions.length}...`;
-    
-    if (i > 0) await new Promise(r => setTimeout(r, 1500));
+// --- SOLVER ---
+async function processQuestion(q, apiKey) {
+    showStatus(`Thinking Q${q.number}...`, '#1976d2');
+    q.domElement.style.opacity = '0.7';
 
     try {
-        const correctIds = await askGemini(q, storage.geminiApiKey);
+        const result = await askGemini(q, apiKey);
+        q.domElement.style.opacity = '1';
 
-        if (correctIds.length > 0) {
-          successCount++;
-          q.answers.forEach(ans => {
-            if (correctIds.includes(ans.id)) {
-              console.log(`✏️ Выбор ответа на странице: %c${ans.id}`, 'font-weight:bold; color:blue;');
-              if (!ans.element.checked) ans.element.click();
-              
-              const row = ans.element.closest('tr');
-              if (row) {
-                  row.style.backgroundColor = '#e8f5e9';
-                  row.style.borderLeft = '5px solid #4caf50';
-                  row.style.transition = 'background 0.5s';
-              }
-            }
-          });
-        } else {
-            console.warn(`⚠️ Модель вернула пустой список ответов для вопроса ${q.number}`);
+        if (result && result.correct.length > 0) {
+            q.answers.forEach(ans => {
+                if (result.correct.includes(ans.id)) {
+                    if (!ans.element.checked) ans.element.click();
+                    if (ans.textElement && !ans.textElement.innerHTML.includes('&bull;')) {
+                        const m = document.createElement('span');
+                        m.innerHTML = '&bull;'; 
+                        m.style.color = MARKER_COLOR; 
+                        m.style.marginLeft='5px';
+                        m.style.cursor='help';
+                        m.title = `AI: ${result.reason}`;
+                        ans.textElement.appendChild(m);
+                    }
+                }
+            });
         }
     } catch (e) {
-        errorCount++;
-        console.error(`🔥 Критическая ошибка на вопросе ${i+1}:`, e);
-        // Визуально помечаем ошибку на странице
-        const qTable = document.querySelectorAll('table.question')[i];
-        if(qTable) qTable.style.border = "2px solid red";
-        
-        if (e.message.includes('404')) {
-            alert(`Модель ${GEMINI_MODEL} недоступна!`);
-            break;
-        }
+        q.domElement.style.opacity = '1';
+        showStatus(`Error Q${q.number}`, 'red');
     }
-  }
+}
 
-  console.log(`%c🏁 ОБРАБОТКА ЗАВЕРШЕНА. Успешно: ${successCount}, Ошибок: ${errorCount}`, "font-size: 14px; font-weight: bold;");
+async function solveAll() {
+  const storage = await chrome.storage.sync.get(['geminiApiKey']);
+  if (!storage.geminiApiKey) return alert('No API Key');
+
+  const questions = extractQuestions();
+  if (!questions.length) return;
   
-  button.value = `✅ Готово: ${successCount}/${questions.length}`;
-  setTimeout(() => {
-    button.value = originalValue;
-    button.disabled = false;
-  }, 3000);
+  console.group('🚀 START ALL');
+  for (let i = 0; i < questions.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 1000));
+    await processQuestion(questions[i], storage.geminiApiKey);
+  }
+  console.groupEnd();
+  showStatus('Done'); hideStatus();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', addSolveButton);
-} else {
-  addSolveButton();
+// --- INIT ---
+function init() {
+    unlockSite();
+
+    document.addEventListener('keydown', async (e) => {
+        if (e.altKey === USE_ALT_KEY && e.code === HOTKEY_CODE) await solveAll();
+    });
+
+    document.addEventListener('click', async (e) => {
+        if (e.altKey) {
+            const table = e.target.closest('table.question');
+            if (table) {
+                e.preventDefault(); e.stopPropagation();
+                const storage = await chrome.storage.sync.get(['geminiApiKey']);
+                if (!storage.geminiApiKey) return alert('No API Key');
+
+                const allTables = Array.from(document.querySelectorAll('table.question'));
+                const q = parseQuestion(table, allTables.indexOf(table));
+                if (q) await processQuestion(q, storage.geminiApiKey);
+            }
+        }
+    }, true);
 }
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
