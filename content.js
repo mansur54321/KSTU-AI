@@ -13,7 +13,7 @@ console.log(`%c🚀 AI Helper: Gemini 2.5 Only (Stealth Mode)`, "color: #fff; ba
 
 // --- UI ---
 let statusIndicator = null;
-function showStatus(msg, color = '#666') {
+function showStatus(message, color = '#666') {
     if (!statusIndicator) {
         statusIndicator = document.createElement('div');
         statusIndicator.style.cssText = `
@@ -25,7 +25,7 @@ function showStatus(msg, color = '#666') {
         `;
         document.body.appendChild(statusIndicator);
     }
-    statusIndicator.innerText = msg;
+    statusIndicator.innerText = message;
     statusIndicator.style.color = color;
     statusIndicator.style.display = 'block';
 }
@@ -34,25 +34,25 @@ function hideStatus() { if (statusIndicator) setTimeout(() => { statusIndicator.
 // --- UNLOCKER ---
 function unlockSite() {
     const events = ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup', 'keydown', 'keyup', 'dragstart'];
-    events.forEach(evt => window.addEventListener(evt, (e) => { e.stopPropagation(); }, true));
+    events.forEach(eventType => window.addEventListener(eventType, (event) => { event.stopPropagation(); }, true));
     const style = document.createElement('style');
     style.innerHTML = ' * { -webkit-user-select: text !important; -moz-user-select: text !important; user-select: text !important; pointer-events: auto !important; } ';
     document.head.appendChild(style);
 }
 
 // --- IMAGE HELPER ---
-async function processImageSource(url) {
+async function processImageSource(imageUrl) {
   try {
-    if (!url || url.startsWith('file://')) return null;
+    if (!imageUrl || imageUrl.startsWith('file://')) return null;
     let base64Data, mimeType;
-    if (url.startsWith('data:')) {
-        const commaIdx = url.indexOf(',');
-        if (commaIdx === -1) return null;
-        const meta = url.substring(0, commaIdx);
-        mimeType = (meta.match(/data:([^;]+);/) || [])[1] || 'image/jpeg';
-        base64Data = url.substring(commaIdx + 1);
+    if (imageUrl.startsWith('data:')) {
+        const commaIndex = imageUrl.indexOf(',');
+        if (commaIndex === -1) return null;
+        const metaData = imageUrl.substring(0, commaIndex);
+        mimeType = (metaData.match(/data:([^;]+);/) || [])[1] || 'image/jpeg';
+        base64Data = imageUrl.substring(commaIndex + 1);
     } else {
-        const response = await fetch(url);
+        const response = await fetch(imageUrl);
         if (!response.ok) throw new Error('Img Fetch Error');
         const blob = await response.blob();
         mimeType = blob.type;
@@ -63,7 +63,7 @@ async function processImageSource(url) {
         });
     }
     return { base64: base64Data, mime: mimeType };
-  } catch (e) { return null; }
+  } catch (error) { return null; }
 }
 
 // --- PARSER ---
@@ -71,8 +71,8 @@ function parseQuestion(table, index) {
     const textElem = table.querySelector('.text');
     if (!textElem) return null;
     
-    const qImages = [];
-    textElem.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
+    const questionImages = [];
+    textElem.querySelectorAll('img').forEach(imageElement => { if (imageElement.src) questionImages.push(imageElement.src); });
 
     const answerTable = table.nextElementSibling;
     if (!answerTable || !answerTable.classList.contains('answer')) return null;
@@ -83,13 +83,13 @@ function parseQuestion(table, index) {
         const textDiv = row.querySelector('.text');
         const input = row.querySelector('input');
         if (label && input) {
-            let ansText = textDiv ? textDiv.innerText.trim() : '';
-            let ansImgSrc = null;
-            if (textDiv) { const img = textDiv.querySelector('img'); if (img) ansImgSrc = img.src; }
+            let answerText = textDiv ? textDiv.innerText.trim() : '';
+            let answerImageSource = null;
+            if (textDiv) { const imageElement = textDiv.querySelector('img'); if (imageElement) answerImageSource = imageElement.src; }
 
             answers.push({
                 id: label.innerText.replace('.', '').trim(),
-                text: ansText, imgSrc: ansImgSrc, element: input, textElement: textDiv
+                text: answerText, imgSrc: answerImageSource, element: input, textElement: textDiv
             });
         }
     });
@@ -97,7 +97,7 @@ function parseQuestion(table, index) {
     return {
         number: index + 1, 
         text: textElem.innerText.trim(),
-        images: qImages, 
+        images: questionImages, 
         answers: answers, 
         isMultiSelect: answerTable.dataset.qtype === '2',
         domElement: table
@@ -107,8 +107,8 @@ function parseQuestion(table, index) {
 function extractQuestions() {
     const questions = [];
     document.querySelectorAll('table.question').forEach((table, index) => {
-        const q = parseQuestion(table, index);
-        if (q) questions.push(q);
+        const parsedQuestion = parseQuestion(table, index);
+        if (parsedQuestion) questions.push(parsedQuestion);
     });
     return questions;
 }
@@ -118,22 +118,22 @@ async function askGemini(question, apiKey) {
     const parts = [];
     
     // Images from Question
-    for (const url of question.images) {
-        const img = await processImageSource(url);
-        if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.base64 } });
+    for (const imageUrl of question.images) {
+        const imageData = await processImageSource(imageUrl);
+        if (imageData) parts.push({ inline_data: { mime_type: imageData.mime, data: imageData.base64 } });
     }
 
     // Options text + images
     let optionsText = "";
-    let imgCounter = 0;
-    for (const ans of question.answers) {
-        optionsText += `${ans.id}. ${ans.text}`;
-        if (ans.imgSrc) {
-            const img = await processImageSource(ans.imgSrc);
-            if (img) {
-                parts.push({ inline_data: { mime_type: img.mime, data: img.base64 } });
-                imgCounter++;
-                optionsText += ` [Image #${imgCounter}]`;
+    let imageCounter = 0;
+    for (const answer of question.answers) {
+        optionsText += `${answer.id}. ${answer.text}`;
+        if (answer.imgSrc) {
+            const imageData = await processImageSource(answer.imgSrc);
+            if (imageData) {
+                parts.push({ inline_data: { mime_type: imageData.mime, data: imageData.base64 } });
+                imageCounter++;
+                optionsText += ` [Image #${imageCounter}]`;
             }
         }
         optionsText += "\n";
@@ -167,8 +167,8 @@ Return JSON ONLY:
     if (imageParts.length > 0) {
         console.groupCollapsed(`📸 Images (${imageParts.length})`);
         imageParts.forEach((part) => {
-            const url = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
-            console.log('%c ', `font-size: 1px; padding: 50px; background: url('${url}') no-repeat center/contain;`);
+            const imageUrl = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
+            console.log('%c ', `font-size: 1px; padding: 50px; background: url('${imageUrl}') no-repeat center/contain;`);
         });
         console.groupEnd();
     }
@@ -190,8 +190,8 @@ Return JSON ONLY:
             }
 
             if (!response.ok) {
-                 const errTxt = await response.text();
-                 throw new Error(`API Error: ${errTxt}`);
+                 const errorText = await response.text();
+                 throw new Error(`API Error: ${errorText}`);
             }
 
             const data = await response.json();
@@ -202,8 +202,8 @@ Return JSON ONLY:
             showStatus(`Solved via ${model}`, '#2e7d32');
             return result;
 
-        } catch (e) {
-            console.error(`❌ Error ${model}:`, e);
+        } catch (error) {
+            console.error(`❌ Error ${model}:`, error);
         }
     }
     console.groupEnd();
@@ -211,46 +211,46 @@ Return JSON ONLY:
 }
 
 // --- SOLVER ---
-async function processQuestion(q, apiKey) {
-    showStatus(`Thinking Q${q.number}...`, '#1976d2');
-    q.domElement.style.opacity = '0.7';
+async function processQuestion(question, apiKey) {
+    showStatus(`Thinking Q${question.number}...`, '#1976d2');
+    question.domElement.style.opacity = '0.7';
 
     try {
-        const result = await askGemini(q, apiKey);
-        q.domElement.style.opacity = '1';
+        const result = await askGemini(question, apiKey);
+        question.domElement.style.opacity = '1';
 
         if (result && result.correct.length > 0) {
-            q.answers.forEach(ans => {
-                if (result.correct.includes(ans.id)) {
+            question.answers.forEach(answer => {
+                if (result.correct.includes(answer.id)) {
                     // 1. Click
-                    if (!ans.element.checked) ans.element.click();
+                    if (!answer.element.checked) answer.element.click();
                     
                     // 2. Marker (Right Aligned)
-                    if (ans.textElement && !ans.textElement.innerHTML.includes('&bull;')) {
-                        const m = document.createElement('span');
-                        m.innerHTML = '&bull;'; 
-                        m.style.color = MARKER_COLOR; 
+                    if (answer.textElement && !answer.textElement.innerHTML.includes('&bull;')) {
+                        const marker = document.createElement('span');
+                        marker.innerHTML = '&bull;'; 
+                        marker.style.color = MARKER_COLOR; 
                         
                         // Right Align Styles
-                        m.style.float = 'right';      
-                        m.style.marginLeft = '10px';  
-                        m.style.fontSize = '18px';    
-                        m.style.cursor = 'help';
-                        m.title = `AI: ${result.reason}`;
+                        marker.style.float = 'right';      
+                        marker.style.marginLeft = '10px';  
+                        marker.style.fontSize = '18px';    
+                        marker.style.cursor = 'help';
+                        marker.title = `AI: ${result.reason}`;
                         
                         // Prepend to make float work correctly on same line
-                        if (ans.textElement.firstChild) {
-                            ans.textElement.insertBefore(m, ans.textElement.firstChild);
+                        if (answer.textElement.firstChild) {
+                            answer.textElement.insertBefore(marker, answer.textElement.firstChild);
                         } else {
-                            ans.textElement.appendChild(m);
+                            answer.textElement.appendChild(marker);
                         }
                     }
                 }
             });
         }
-    } catch (e) {
-        q.domElement.style.opacity = '1';
-        showStatus(`Error Q${q.number}`, 'red');
+    } catch (error) {
+        question.domElement.style.opacity = '1';
+        showStatus(`Error Q${question.number}`, 'red');
     }
 }
 
@@ -262,9 +262,9 @@ async function solveAll() {
     if (!questions.length) return;
     
     console.group('🚀 START BATCH');
-    for (let i = 0; i < questions.length; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 1000));
-        await processQuestion(questions[i], storage.geminiApiKey);
+    for (let questionIndex = 0; questionIndex < questions.length; questionIndex++) {
+        if (questionIndex > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+        await processQuestion(questions[questionIndex], storage.geminiApiKey);
     }
     console.groupEnd();
     showStatus('Done'); hideStatus();
@@ -274,24 +274,24 @@ async function solveAll() {
 function init() {
     unlockSite();
 
-    document.addEventListener('keydown', async (e) => {
-        if (e.altKey === USE_ALT_KEY && (e.code === HOTKEY_CODE || e.key === 's' || e.key === 'S' || e.key === 'ы')) {
-            e.preventDefault(); e.stopPropagation();
+    document.addEventListener('keydown', async (event) => {
+        if (event.altKey === USE_ALT_KEY && (event.code === HOTKEY_CODE || event.key === 's' || event.key === 'S' || event.key === 'ы')) {
+            event.preventDefault(); event.stopPropagation();
             await solveAll();
         }
     }, true);
 
-    document.addEventListener('click', async (e) => {
-        if (e.altKey) {
-            const table = e.target.closest('table.question');
+    document.addEventListener('click', async (event) => {
+        if (event.altKey) {
+            const table = event.target.closest('table.question');
             if (table) {
-                e.preventDefault(); e.stopPropagation();
+                event.preventDefault(); event.stopPropagation();
                 const storage = await chrome.storage.sync.get(['geminiApiKey']);
                 if (!storage.geminiApiKey) return alert('No API Key');
 
                 const allTables = Array.from(document.querySelectorAll('table.question'));
-                const q = parseQuestion(table, allTables.indexOf(table));
-                if (q) await processQuestion(q, storage.geminiApiKey);
+                const parsedQuestion = parseQuestion(table, allTables.indexOf(table));
+                if (parsedQuestion) await processQuestion(parsedQuestion, storage.geminiApiKey);
             }
         }
     }, true);

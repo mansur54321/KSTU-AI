@@ -41,8 +41,8 @@ document.addEventListener('DOMContentLoaded', function() {
     showStatus('Запрос к gemini-2.5-pro...', 'loading');
 
     try {
-      const MODEL = 'gemini-2.5-pro'; // Строго 2.5 Pro
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
+      const GEMINI_MODEL_NAME = 'gemini-2.5-pro'; // Строго 2.5 Pro
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_NAME}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,9 +55,9 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         const errorText = await response.text();
         console.error('Error:', errorText);
-        let msg = `Ошибка ${response.status}`;
-        if (response.status === 404) msg += ': Модель не найдена (проверьте доступ)';
-        showStatus(`❌ ${msg}`, 'error');
+        let message = `Ошибка ${response.status}`;
+        if (response.status === 404) message += ': Модель не найдена (проверьте доступ)';
+        showStatus(`❌ ${message}`, 'error');
       }
     } catch (error) {
       showStatus('❌ Ошибка сети', 'error');
