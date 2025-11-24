@@ -69,7 +69,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Reset statistics
   resetStatsButton.addEventListener('click', function() {
-    if (confirm('Сбросить всю статистику?')) {
+    // Custom confirmation for better accessibility
+    const confirmed = confirm('Сбросить всю статистику и кэш вопросов?');
+    if (confirmed) {
       const emptyStats = { questionsSolved: 0, apiCalls: 0, cacheHits: 0 };
       chrome.storage.local.set({ stats: emptyStats, questionCache: {} }, function() {
         updateStatsDisplay(emptyStats);
@@ -81,7 +83,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Export settings
   exportSettingsButton.addEventListener('click', function() {
-    chrome.storage.sync.get(null, function(settings) {
+    // Export only specific settings, not API key for security
+    chrome.storage.sync.get(['delayBetweenQuestions', 'markerColor', 'enableCache', 'darkMode'], function(settings) {
       const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -89,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
       a.download = 'kstu-ai-settings.json';
       a.click();
       URL.revokeObjectURL(url);
-      showStatus('✅ Настройки экспортированы', 'success');
+      showStatus('✅ Настройки экспортированы (без API ключа)', 'success');
       setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
     });
   });
@@ -107,6 +110,12 @@ document.addEventListener('DOMContentLoaded', function() {
       reader.onload = function(event) {
         try {
           const settings = JSON.parse(event.target.result);
+          
+          // Validate that it's a valid settings object
+          if (typeof settings !== 'object' || settings === null) {
+            throw new Error('Invalid format');
+          }
+          
           chrome.storage.sync.set(settings, function() {
             // Reload UI
             if (settings.geminiApiKey) apiKeyInput.value = settings.geminiApiKey;
@@ -119,7 +128,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
           });
         } catch (error) {
-          showStatus('❌ Ошибка чтения файла', 'error');
+          console.error('Import error:', error);
+          showStatus('❌ Неверный формат файла настроек', 'error');
         }
       };
       reader.readAsText(file);

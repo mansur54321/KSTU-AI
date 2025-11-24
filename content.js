@@ -23,13 +23,17 @@ async function updateStats(field, increment = 1) {
 
 function hashQuestion(question) {
     // Create a simple hash from question text and answers
+    // Note: This is a basic hash for caching purposes, not cryptographic security
     const text = question.text + question.answers.map(a => a.text).join('');
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
-        hash = ((hash << 5) - hash) + text.charCodeAt(i);
-        hash = hash & hash;
+        const char = text.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Convert to 32-bit integer
     }
-    return hash.toString(36);
+    // Add question type to hash to differentiate single vs multi-select
+    hash = hash ^ (question.isMultiSelect ? 1 : 0);
+    return Math.abs(hash).toString(36);
 }
 
 async function getCachedAnswer(question) {
@@ -59,10 +63,15 @@ async function cacheAnswer(question, result) {
 
 // Load settings on init
 async function loadSettings() {
-    const settings = await chrome.storage.sync.get(['markerColor', 'delayBetweenQuestions', 'enableCache']);
-    if (settings.markerColor) MARKER_COLOR = settings.markerColor;
-    if (settings.delayBetweenQuestions !== undefined) DELAY_BETWEEN_QUESTIONS = settings.delayBetweenQuestions;
-    if (settings.enableCache !== undefined) ENABLE_CACHE = settings.enableCache;
+    try {
+        const settings = await chrome.storage.sync.get(['markerColor', 'delayBetweenQuestions', 'enableCache']);
+        if (settings.markerColor) MARKER_COLOR = settings.markerColor;
+        if (settings.delayBetweenQuestions !== undefined) DELAY_BETWEEN_QUESTIONS = settings.delayBetweenQuestions;
+        if (settings.enableCache !== undefined) ENABLE_CACHE = settings.enableCache;
+    } catch (error) {
+        console.warn('Failed to load settings, using defaults:', error);
+        // Fall back to default values already set
+    }
 }
 
 // --- UI ---
