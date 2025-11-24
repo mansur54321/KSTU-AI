@@ -7,9 +7,63 @@ const MODEL_HIERARCHY = [
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
 const HOTKEY_CODE = 'KeyS';     
 const USE_ALT_KEY = true;       
-const MARKER_COLOR = '#cccccc'; 
+let MARKER_COLOR = '#cccccc';
+let DELAY_BETWEEN_QUESTIONS = 1000;
+let ENABLE_CACHE = true;
 
 console.log(`%c🚀 AI Helper: Gemini 2.5 Only (Stealth Mode)`, "color: #fff; background: #4caf50; padding: 5px; font-weight: bold;");
+
+// --- STATISTICS & CACHE ---
+async function updateStats(field, increment = 1) {
+    const result = await chrome.storage.local.get(['stats']);
+    const stats = result.stats || { questionsSolved: 0, apiCalls: 0, cacheHits: 0 };
+    stats[field] = (stats[field] || 0) + increment;
+    await chrome.storage.local.set({ stats });
+}
+
+function hashQuestion(question) {
+    // Create a simple hash from question text and answers
+    const text = question.text + question.answers.map(a => a.text).join('');
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) - hash) + text.charCodeAt(i);
+        hash = hash & hash;
+    }
+    return hash.toString(36);
+}
+
+async function getCachedAnswer(question) {
+    if (!ENABLE_CACHE) return null;
+    
+    const hash = hashQuestion(question);
+    const result = await chrome.storage.local.get(['questionCache']);
+    const cache = result.questionCache || {};
+    
+    if (cache[hash]) {
+        console.log(`%c💾 Cache hit for Q${question.number}`, 'color: #9c27b0; font-weight: bold');
+        await updateStats('cacheHits');
+        return cache[hash];
+    }
+    return null;
+}
+
+async function cacheAnswer(question, result) {
+    if (!ENABLE_CACHE) return;
+    
+    const hash = hashQuestion(question);
+    const storage = await chrome.storage.local.get(['questionCache']);
+    const cache = storage.questionCache || {};
+    cache[hash] = result;
+    await chrome.storage.local.set({ questionCache: cache });
+}
+
+// Load settings on init
+async function loadSettings() {
+    const settings = await chrome.storage.sync.get(['markerColor', 'delayBetweenQuestions', 'enableCache']);
+    if (settings.markerColor) MARKER_COLOR = settings.markerColor;
+    if (settings.delayBetweenQuestions !== undefined) DELAY_BETWEEN_QUESTIONS = settings.delayBetweenQuestions;
+    if (settings.enableCache !== undefined) ENABLE_CACHE = settings.enableCache;
+}
 
 // --- UI ---
 let statusIndicator = null;
@@ -115,6 +169,12 @@ function extractQuestions() {
 
 // --- API CLIENT (GEMINI) ---
 async function askGemini(question, apiKey) {
+    // Check cache first
+    const cachedResult = await getCachedAnswer(question);
+    if (cachedResult) {
+        return cachedResult;
+    }
+
     const parts = [];
     
     // Images from Question
@@ -183,6 +243,9 @@ Return JSON ONLY:
                 body: JSON.stringify(requestBody)
             });
 
+            // Track API call
+            await updateStats('apiCalls');
+
             // Handle Limits (429) & Overload (503)
             if (response.status === 429 || response.status === 503) {
                  console.warn(`⚠️ ${model} status ${response.status}. Next...`);
@@ -200,6 +263,10 @@ Return JSON ONLY:
             console.log(`%c✅ Result:`, 'color: green; font-weight: bold;', result);
             console.groupEnd();
             showStatus(`Solved via ${model}`, '#2e7d32');
+            
+            // Cache the result
+            await cacheAnswer(question, result);
+            
             return result;
 
         } catch (e) {
@@ -220,6 +287,9 @@ async function processQuestion(q, apiKey) {
         q.domElement.style.opacity = '1';
 
         if (result && result.correct.length > 0) {
+            // Update statistics
+            await updateStats('questionsSolved');
+            
             q.answers.forEach(ans => {
                 if (result.correct.includes(ans.id)) {
                     // 1. Click
@@ -263,7 +333,7 @@ async function solveAll() {
     
     console.group('🚀 START BATCH');
     for (let i = 0; i < questions.length; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 1000));
+        if (i > 0) await new Promise(r => setTimeout(r, DELAY_BETWEEN_QUESTIONS));
         await processQuestion(questions[i], storage.geminiApiKey);
     }
     console.groupEnd();
@@ -271,7 +341,8 @@ async function solveAll() {
 }
 
 // --- INIT ---
-function init() {
+async function init() {
+    await loadSettings();
     unlockSite();
 
     document.addEventListener('keydown', async (e) => {
