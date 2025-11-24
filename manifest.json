@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI Test Solver (Gemini 2.5)",
-  "version": "2.5",
-  "description": "Автоматическое решение тестов с помощью Google Gemini 3.0 Pro",
+  "version": "2.6",
+  "description": "Автоматическое решение тестов с помощью Google Gemini 2.5 Pro с умной статистикой и кэшированием",
   "permissions": [
     "storage"
   ],

@@ -4,18 +4,46 @@
   <meta charset="UTF-8">
   <style>
     body { width: 360px; padding: 15px; font-family: sans-serif; background: #f4f6f8; }
+    body.dark-mode { background: #1a1a1a; }
     .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    body.dark-mode .container { background: #2d2d2d; }
     h2 { margin-top: 0; color: #333; font-size: 18px; text-align: center; }
+    body.dark-mode h2 { color: #e0e0e0; }
     .badge { background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+    body.dark-mode .badge { background: #0d47a1; color: #90caf9; }
+    label { color: #333; }
+    body.dark-mode label { color: #e0e0e0; }
     input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+    body.dark-mode input { background: #3d3d3d; border-color: #555; color: #e0e0e0; }
     .btn-row { display: flex; gap: 10px; }
     button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
     #save { background: #4CAF50; color: white; }
     #testApi { background: #2196F3; color: white; }
+    #darkModeToggle { background: #666; color: white; flex: 0.5; }
     #status { margin-top: 10px; padding: 10px; border-radius: 4px; font-size: 12px; display: none; word-break: break-all; }
     .success { background: #dff0d8; color: #3c763d; }
     .error { background: #f2dede; color: #a94442; }
     .loading { background: #fcf8e3; color: #8a6d3b; }
+    body.dark-mode .success { background: #1b5e20; color: #a5d6a7; }
+    body.dark-mode .error { background: #b71c1c; color: #ef9a9a; }
+    body.dark-mode .loading { background: #f57f17; color: #fff9c4; }
+    .stats-box { margin-top: 15px; padding: 10px; background: #f9f9f9; border-radius: 4px; font-size: 12px; }
+    body.dark-mode .stats-box { background: #3d3d3d; }
+    .stats-item { display: flex; justify-content: space-between; margin: 5px 0; color: #666; }
+    body.dark-mode .stats-item { color: #b0b0b0; }
+    .stats-value { font-weight: bold; color: #333; }
+    body.dark-mode .stats-value { color: #e0e0e0; }
+    .info-text { font-size: 11px; color: #666; margin-top: 15px; }
+    body.dark-mode .info-text { color: #b0b0b0; }
+    .settings-section { margin-top: 15px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+    body.dark-mode .settings-section { background: #3d3d3d; }
+    .settings-title { font-size: 13px; font-weight: bold; margin-bottom: 8px; color: #333; }
+    body.dark-mode .settings-title { color: #e0e0e0; }
+    .setting-item { margin: 8px 0; }
+    .setting-label { font-size: 11px; color: #666; margin-bottom: 3px; }
+    body.dark-mode .setting-label { color: #b0b0b0; }
+    input[type="number"], input[type="color"] { width: auto; }
+    .btn-small { padding: 6px 10px; font-size: 11px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -27,11 +55,51 @@
     <div class="btn-row">
       <button id="save">Сохранить</button>
       <button id="testApi">🧪 Тест</button>
+      <button id="darkModeToggle">🌙</button>
     </div>
 
     <div id="status"></div>
     
-    <p style="font-size: 11px; color: #666; margin-top: 15px;">
+    <!-- Statistics Section -->
+    <div class="stats-box">
+      <div class="settings-title">📊 Статистика</div>
+      <div class="stats-item">
+        <span>Решено вопросов:</span>
+        <span class="stats-value" id="statQuestions">0</span>
+      </div>
+      <div class="stats-item">
+        <span>API запросов:</span>
+        <span class="stats-value" id="statApiCalls">0</span>
+      </div>
+      <div class="stats-item">
+        <span>Использовано кэша:</span>
+        <span class="stats-value" id="statCacheHits">0</span>
+      </div>
+      <button id="resetStats" class="btn-small" style="background: #f44336; color: white; width: 100%;">Сбросить статистику</button>
+    </div>
+
+    <!-- Settings Section -->
+    <div class="settings-section">
+      <div class="settings-title">⚙️ Настройки</div>
+      <div class="setting-item">
+        <div class="setting-label">Задержка между вопросами (мс):</div>
+        <input type="number" id="delayBetweenQuestions" value="1000" min="0" max="10000" step="100">
+      </div>
+      <div class="setting-item">
+        <div class="setting-label">Цвет маркера:</div>
+        <input type="color" id="markerColor" value="#cccccc">
+      </div>
+      <div class="setting-item">
+        <label style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="enableCache">
+          <span class="setting-label" style="margin: 0;">Включить кэширование вопросов</span>
+        </label>
+      </div>
+      <button id="exportSettings" class="btn-small" style="background: #FF9800; color: white; width: 48%; display: inline-block;">📤 Экспорт</button>
+      <button id="importSettings" class="btn-small" style="background: #9C27B0; color: white; width: 48%; display: inline-block; margin-left: 4%;">📥 Импорт</button>
+    </div>
+    
+    <p class="info-text">
       Используется модель: <b>gemini-2.5-pro</b><br>
       Это стабильная и мощная версия.<br>
       Если тест выдает ошибку 404 — проверьте доступность модели в вашем регионе или создайте новый ключ.

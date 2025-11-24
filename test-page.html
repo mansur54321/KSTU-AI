@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page - KSTU AI Extension Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .question {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .text {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .answer {
+            background: white;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .answer tr {
+            padding: 5px 0;
+        }
+        .num {
+            padding-right: 10px;
+            font-weight: bold;
+        }
+        .answer .text {
+            font-weight: normal;
+            margin: 0;
+        }
+        input[type="radio"], input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h2>🧪 Test Page for KSTU AI Extension</h2>
+        <p><strong>Instructions:</strong></p>
+        <ul>
+            <li>Install the extension in developer mode</li>
+            <li>Set your API key in the extension popup</li>
+            <li>Press <strong>Alt + S</strong> to solve all questions</li>
+            <li>Or <strong>Alt + Click</strong> on a specific question to solve it individually</li>
+        </ul>
+        <p><strong>Note:</strong> This is a demo page. The extension is designed for https://univer.kstu.kz/student/AttemptPage*</p>
+    </div>
+
+    <!-- Question 1 -->
+    <table class="question">
+        <tr>
+            <td class="text">Что такое искусственный интеллект?</td>
+        </tr>
+    </table>
+    <table class="answer" data-qtype="1">
+        <tr>
+            <td class="num">A.</td>
+            <td class="text">Система, способная имитировать человеческий интеллект</td>
+            <td><input type="radio" name="q1" value="A"></td>
+        </tr>
+        <tr>
+            <td class="num">B.</td>
+            <td class="text">Компьютерная программа для игр</td>
+            <td><input type="radio" name="q1" value="B"></td>
+        </tr>
+        <tr>
+            <td class="num">C.</td>
+            <td class="text">Физическое устройство</td>
+            <td><input type="radio" name="q1" value="C"></td>
+        </tr>
+        <tr>
+            <td class="num">D.</td>
+            <td class="text">Операционная система</td>
+            <td><input type="radio" name="q1" value="D"></td>
+        </tr>
+    </table>
+
+    <!-- Question 2 -->
+    <table class="question">
+        <tr>
+            <td class="text">Какой язык программирования наиболее популярен для машинного обучения?</td>
+        </tr>
+    </table>
+    <table class="answer" data-qtype="1">
+        <tr>
+            <td class="num">A.</td>
+            <td class="text">JavaScript</td>
+            <td><input type="radio" name="q2" value="A"></td>
+        </tr>
+        <tr>
+            <td class="num">B.</td>
+            <td class="text">Python</td>
+            <td><input type="radio" name="q2" value="B"></td>
+        </tr>
+        <tr>
+            <td class="num">C.</td>
+            <td class="text">C++</td>
+            <td><input type="radio" name="q2" value="C"></td>
+        </tr>
+        <tr>
+            <td class="num">D.</td>
+            <td class="text">PHP</td>
+            <td><input type="radio" name="q2" value="D"></td>
+        </tr>
+    </table>
+
+    <!-- Question 3 - Multi-select -->
+    <table class="question">
+        <tr>
+            <td class="text">Выберите виды машинного обучения: (несколько вариантов)</td>
+        </tr>
+    </table>
+    <table class="answer" data-qtype="2">
+        <tr>
+            <td class="num">A.</td>
+            <td class="text">Обучение с учителем</td>
+            <td><input type="checkbox" name="q3" value="A"></td>
+        </tr>
+        <tr>
+            <td class="num">B.</td>
+            <td class="text">Обучение без учителя</td>
+            <td><input type="checkbox" name="q3" value="B"></td>
+        </tr>
+        <tr>
+            <td class="num">C.</td>
+            <td class="text">Обучение с подкреплением</td>
+            <td><input type="checkbox" name="q3" value="C"></td>
+        </tr>
+        <tr>
+            <td class="num">D.</td>
+            <td class="text">Квантовое обучение</td>
+            <td><input type="checkbox" name="q3" value="D"></td>
+        </tr>
+    </table>
+
+    <div class="info">
+        <p><strong>Extension Features to Test:</strong></p>
+        <ul>
+            <li>✅ Statistics tracking in popup</li>
+            <li>✅ Question caching (solve twice to see cache hits increase)</li>
+            <li>✅ Customizable marker color</li>
+            <li>✅ Adjustable delay between questions</li>
+            <li>✅ Dark mode toggle</li>
+            <li>✅ Export/Import settings</li>
+        </ul>
+    </div>
+</body>
+</html>
