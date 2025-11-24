@@ -1,0 +1,32 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Chrome Extension
+*.pem
+*.crx
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Node modules (if any build tools are added)
+node_modules/
+package-lock.json
+
+# Build artifacts
+dist/
+build/
+
+# User settings exports
+kstu-ai-settings.json
