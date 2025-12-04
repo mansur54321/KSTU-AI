@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "AI Test Solver (Gemini 2.5)",
-  "version": "2.5",
-  "description": "Автоматическое решение тестов с помощью Google Gemini 3.0 Pro",
+  "name": "AI Test Solver (Multi-Provider)",
+  "version": "3.0",
+  "description": "Автоматическое решение тестов с помощью Gemini или OpenRouter",
   "permissions": [
     "storage"
   ],
   "host_permissions": [
     "https://univer.kstu.kz/*",
     "https://generativelanguage.googleapis.com/*",
+    "https://openrouter.ai/*",
     "<all_urls>"
   ],
   "content_scripts": [
