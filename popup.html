@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 360px; padding: 15px; font-family: sans-serif; background: #f4f6f8; }
+    body { width: 400px; padding: 15px; font-family: sans-serif; background: #f4f6f8; }
     .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     h2 { margin-top: 0; color: #333; font-size: 18px; text-align: center; }
     .badge { background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-    input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-    .btn-row { display: flex; gap: 10px; }
+    label { display: block; margin-top: 12px; font-weight: bold; font-size: 13px; color: #555; }
+    select, input { width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+    .btn-row { display: flex; gap: 10px; margin-top: 15px; }
     button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
     #save { background: #4CAF50; color: white; }
     #testApi { background: #2196F3; color: white; }
@@ -16,13 +17,29 @@
     .success { background: #dff0d8; color: #3c763d; }
     .error { background: #f2dede; color: #a94442; }
     .loading { background: #fcf8e3; color: #8a6d3b; }
+    .provider-section { margin-top: 10px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; }
+    .info { font-size: 11px; color: #666; margin-top: 15px; line-height: 1.5; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>AI Helper <span class="badge">Gemini 2.5 Pro</span></h2>
-    <label>Введите API Key (Google AI Studio):</label>
-    <input type="text" id="apiKey" placeholder="AIzaSy...">
+    <h2>AI Helper <span class="badge">Multi-Provider</span></h2>
+    
+    <label>Выберите провайдер AI:</label>
+    <select id="apiProvider">
+      <option value="gemini">Google Gemini</option>
+      <option value="openrouter">OpenRouter</option>
+    </select>
+
+    <div id="geminiSection" class="provider-section">
+      <label>Gemini API Key:</label>
+      <input type="password" id="geminiApiKey" placeholder="AIzaSy...">
+    </div>
+
+    <div id="openrouterSection" class="provider-section" style="display:none;">
+      <label>OpenRouter API Key:</label>
+      <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-...">
+    </div>
     
     <div class="btn-row">
       <button id="save">Сохранить</button>
@@ -31,11 +48,14 @@
 
     <div id="status"></div>
     
-    <p style="font-size: 11px; color: #666; margin-top: 15px;">
-      Используется модель: <b>gemini-2.5-pro</b><br>
-      Это стабильная и мощная версия.<br>
-      Если тест выдает ошибку 404 — проверьте доступность модели в вашем регионе или создайте новый ключ.
-    </p>
+    <div class="info">
+      <b>Gemini:</b> Получите ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>
+      <b>OpenRouter:</b> Получите ключ в <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a><br>
+      <br>
+      <b>Управление:</b><br>
+      • Alt + S - решить все вопросы<br>
+      • Alt + Клик - решить один вопрос
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
