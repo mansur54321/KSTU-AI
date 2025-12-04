@@ -81,13 +81,12 @@
 
 ```
 KSTU-AI/
-├── utils/
-│   ├── config.js      # Конфигурация и настройки
-│   ├── ui.js          # UI управление
-│   ├── parser.js      # Парсинг вопросов
-│   ├── api.js         # API клиенты (Gemini, OpenRouter)
-│   └── solver.js      # Логика решения
-├── content.js         # Основной скрипт
+├── content.js         # Основной скрипт (модульная IIFE архитектура)
+│   ├── CONFIG         # Конфигурация и настройки
+│   ├── UI             # UI управление
+│   ├── Parser         # Парсинг вопросов
+│   ├── API            # API клиенты (Gemini, OpenRouter)
+│   └── Solver         # Логика решения
 ├── popup.js           # UI попапа
 ├── popup.html         # HTML попапа
 ├── background.js      # Фоновый скрипт
