@@ -269,7 +269,7 @@ Return JSON ONLY:
 
                 if (!response.ok) {
                     const errTxt = await response.text();
-                    throw new Error(`API Error: ${errTxt}`);
+                    throw new Error(`API Error (${response.status}) with ${model}: ${errTxt}`);
                 }
 
                 const data = await response.json();
@@ -330,7 +330,7 @@ Return JSON ONLY:
 
                 if (!response.ok) {
                     const errTxt = await response.text();
-                    throw new Error(`API Error: ${errTxt}`);
+                    throw new Error(`OpenRouter API Error (${response.status}) with ${model}: ${errTxt}`);
                 }
 
                 const data = await response.json();

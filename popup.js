@@ -41,25 +41,32 @@ document.addEventListener('DOMContentLoaded', function() {
     statusDiv.style.display = 'block';
   }
 
+  function validateApiKey(provider, geminiKey, openrouterKey) {
+    if (provider === 'gemini' && !geminiKey) {
+      showStatus('Введите Gemini ключ!', 'error');
+      return false;
+    }
+    if (provider === 'openrouter' && !openrouterKey) {
+      showStatus('Введите OpenRouter ключ!', 'error');
+      return false;
+    }
+    return true;
+  }
+
   saveButton.addEventListener('click', function() {
     const provider = apiProviderSelect.value;
     const geminiKey = geminiApiKeyInput.value.trim();
     const openrouterKey = openrouterApiKeyInput.value.trim();
     
+    if (!validateApiKey(provider, geminiKey, openrouterKey)) {
+      return;
+    }
+
     const settings = {
       apiProvider: provider,
       geminiApiKey: geminiKey,
       openrouterApiKey: openrouterKey
     };
-
-    if (provider === 'gemini' && !geminiKey) {
-      showStatus('Введите Gemini ключ!', 'error');
-      return;
-    }
-    if (provider === 'openrouter' && !openrouterKey) {
-      showStatus('Введите OpenRouter ключ!', 'error');
-      return;
-    }
 
     chrome.storage.sync.set(settings, function() {
       showStatus('✅ Сохранено', 'success');
@@ -73,12 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const geminiKey = geminiApiKeyInput.value.trim();
     const openrouterKey = openrouterApiKeyInput.value.trim();
 
-    if (provider === 'gemini' && !geminiKey) {
-      showStatus('Нет Gemini ключа', 'error');
-      return;
-    }
-    if (provider === 'openrouter' && !openrouterKey) {
-      showStatus('Нет OpenRouter ключа', 'error');
+    if (!validateApiKey(provider, geminiKey, openrouterKey)) {
       return;
     }
 
