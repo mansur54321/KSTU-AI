@@ -8,12 +8,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const testButton = document.getElementById('testApi');
   const statusDiv = document.getElementById('status');
 
-  if (!apiProviderSelect || !saveButton || !testButton) return;
+  if (!apiProviderSelect || !saveButton || !testButton || !geminiApiKeyInput || !openrouterApiKeyInput || !geminiSection || !openrouterSection) return;
 
   // Load saved settings
   chrome.storage.sync.get(['geminiApiKey', 'openrouterApiKey', 'apiProvider'], function(result) {
-    if (result.geminiApiKey) geminiApiKeyInput.value = result.geminiApiKey;
-    if (result.openrouterApiKey) openrouterApiKeyInput.value = result.openrouterApiKey;
+    if (result.geminiApiKey && geminiApiKeyInput) geminiApiKeyInput.value = result.geminiApiKey;
+    if (result.openrouterApiKey && openrouterApiKeyInput) openrouterApiKeyInput.value = result.openrouterApiKey;
     if (result.apiProvider) {
       apiProviderSelect.value = result.apiProvider;
       toggleProviderSection(result.apiProvider);

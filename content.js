@@ -212,6 +212,8 @@ Return JSON ONLY:
         }
 
         // Images from answer options
+        // Note: Images are sent in order but without explicit labels
+        // The AI model can infer context from prompt structure
         for (const ans of question.answers) {
             if (ans.imgSrc) {
                 const img = await Parser.processImageSource(ans.imgSrc);
@@ -291,6 +293,12 @@ Return JSON ONLY:
 
     async function askOpenRouter(question, apiKey) {
         const prompt = buildPrompt(question);
+        
+        // Note: OpenRouter doesn't support vision in the same way as Gemini
+        // Images are ignored for now. Text-only questions work fine.
+        if (question.images.length > 0) {
+            console.warn(`⚠️ Question ${question.number} has ${question.images.length} image(s), but OpenRouter doesn't support vision API. Processing text only.`);
+        }
         
         // OpenRouter uses OpenAI-compatible format
         const messages = [
