@@ -1,15 +1,14 @@
 // --- CONFIG ---
 const MODEL_HIERARCHY = [
-    'gemini-2.5-pro',    // Основная (Smart, 2 RPM)
-    'gemini-2.5-flash'   // Резервная (Fast, 15 RPM)
+    'gemini-2.5-pro',
+    'gemini-2.5-flash'
 ];
 
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
 const HOTKEY_CODE = 'KeyS';     
 const USE_ALT_KEY = true;       
-const MARKER_COLOR = '#cccccc'; 
 
-console.log(`%c🚀 AI Helper: Gemini 2.5 Only (Stealth Mode)`, "color: #fff; background: #4caf50; padding: 5px; font-weight: bold;");
+console.log(`%c🚀 AI Helper: MIME FIX + AGGRESSIVE UNLOCKER`, "color: #fff; background: #d32f2f; padding: 5px; font-weight: bold;");
 
 // --- UI ---
 let statusIndicator = null;
@@ -31,272 +30,280 @@ function showStatus(msg, color = '#666') {
 }
 function hideStatus() { if (statusIndicator) setTimeout(() => { statusIndicator.style.display = 'none'; }, 4000); }
 
-// --- UNLOCKER ---
+// --- AGGRESSIVE UNLOCKER ---
 function unlockSite() {
-    const events = ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup', 'keydown', 'keyup', 'dragstart'];
-    events.forEach(evt => window.addEventListener(evt, (e) => { e.stopPropagation(); }, true));
+    // 1. CSS Force
     const style = document.createElement('style');
     style.innerHTML = ' * { -webkit-user-select: text !important; -moz-user-select: text !important; user-select: text !important; pointer-events: auto !important; } ';
-    document.head.appendChild(style);
+    if(!document.getElementById('ai-unlock-style')) {
+        style.id = 'ai-unlock-style';
+        document.head.appendChild(style);
+    }
+
+    // 2. Kill Event Listeners (Capture Phase)
+    const events = ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup', 'keydown', 'keyup', 'dragstart'];
+    events.forEach(evt => {
+        window.addEventListener(evt, (e) => { e.stopPropagation(); }, true);
+        document.addEventListener(evt, (e) => { e.stopPropagation(); }, true);
+    });
+
+    // 3. Loop Cleaner (Для Angular, который может восстанавливать защиту)
+    setInterval(() => {
+        const targets = [document, document.body, window];
+        const props = ['oncontextmenu', 'onselectstart', 'oncopy', 'oncut', 'onpaste', 'onkeydown', 'onkeyup'];
+        
+        targets.forEach(t => {
+            if(!t) return;
+            props.forEach(p => {
+                if (t[p] !== null) t[p] = null;
+            });
+        });
+    }, 1000);
 }
 
-// --- IMAGE HELPER ---
+// --- IMAGE HELPER (FIXED MIME TYPES) ---
 async function processImageSource(url) {
   try {
-    if (!url || url.startsWith('file://')) return null;
-    let base64Data, mimeType;
+    if (!url) return null;
+
+    // Base64
     if (url.startsWith('data:')) {
         const commaIdx = url.indexOf(',');
         if (commaIdx === -1) return null;
         const meta = url.substring(0, commaIdx);
-        mimeType = (meta.match(/data:([^;]+);/) || [])[1] || 'image/jpeg';
-        base64Data = url.substring(commaIdx + 1);
-    } else {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Img Fetch Error');
-        const blob = await response.blob();
-        mimeType = blob.type;
-        base64Data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(blob);
-        });
+        let mimeType = (meta.match(/data:([^;]+);/) || [])[1];
+        // Фикс: если mime не определился, ставим jpeg
+        if (!mimeType) mimeType = 'image/jpeg';
+        return { inline_data: { mime_type: mimeType, data: url.substring(commaIdx + 1) } };
     }
-    return { base64: base64Data, mime: mimeType };
-  } catch (e) { return null; }
+
+    // URL (Localhost / Web)
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Img Fetch Error');
+    const blob = await response.blob();
+    
+    // --- MIME TYPE FIX ---
+    // Сервер может вернуть 'application/octet-stream', что ломает Gemini.
+    // Мы принудительно определяем тип.
+    let mimeType = blob.type;
+    
+    if (!mimeType || mimeType === 'application/octet-stream') {
+        if (url.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+        else if (url.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+        else mimeType = 'image/jpeg'; // Дефолт для большинства фото
+    }
+    // ---------------------
+
+    const base64Data = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+    
+    const resBase64 = base64Data.split(',')[1];
+
+    return {
+      inline_data: {
+        mime_type: mimeType,
+        data: resBase64
+      }
+    };
+  } catch (e) { 
+      console.error('Image Error:', e);
+      return null; 
+  }
 }
 
 // --- PARSER ---
-function parseQuestion(table, index) {
-    const textElem = table.querySelector('.text');
-    if (!textElem) return null;
-    
-    const qImages = [];
-    textElem.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
-
-    const answerTable = table.nextElementSibling;
-    if (!answerTable || !answerTable.classList.contains('answer')) return null;
-    
-    const answers = [];
-    answerTable.querySelectorAll('tr').forEach(row => {
-        const label = row.querySelector('.num');
-        const textDiv = row.querySelector('.text');
-        const input = row.querySelector('input');
-        if (label && input) {
-            let ansText = textDiv ? textDiv.innerText.trim() : '';
-            let ansImgSrc = null;
-            if (textDiv) { const img = textDiv.querySelector('img'); if (img) ansImgSrc = img.src; }
-
-            answers.push({
-                id: label.innerText.replace('.', '').trim(),
-                text: ansText, imgSrc: ansImgSrc, element: input, textElement: textDiv
-            });
-        }
-    });
-    
-    return {
-        number: index + 1, 
-        text: textElem.innerText.trim(),
-        images: qImages, 
-        answers: answers, 
-        isMultiSelect: answerTable.dataset.qtype === '2',
-        domElement: table
-    };
-}
-
 function extractQuestions() {
     const questions = [];
-    document.querySelectorAll('table.question').forEach((table, index) => {
-        const q = parseQuestion(table, index);
-        if (q) questions.push(q);
+    
+    // Поиск текста вопроса (Platonus / Univer)
+    const questionWrapper = document.querySelector('.question-wrapper, div[ng-bind-html="question.questionText"], .text');
+    if (!questionWrapper) return []; 
+
+    const text = questionWrapper.innerText.trim();
+    
+    // Поиск картинок
+    const qImages = [];
+    questionWrapper.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
+
+    const answers = [];
+    // Селектор для Platonus + Univer
+    const answerRows = document.querySelectorAll('.table-question tbody tr, table.answer tr');
+    
+    answerRows.forEach((row, idx) => {
+        const letterId = String.fromCharCode(65 + idx); // A, B, C...
+        const input = row.querySelector('input[type="radio"], input[type="checkbox"]');
+        
+        // Ищем текст ответа
+        // В Platonus текст во 2-й ячейке, в Univer класс .text
+        let textContainer = row.querySelector('.text') || (row.querySelectorAll('td').length > 1 ? row.querySelectorAll('td')[1] : row);
+        
+        if (input && textContainer) {
+             let ansText = textContainer.innerText.trim();
+             let ansImgSrc = null;
+             const img = textContainer.querySelector('img');
+             if (img) ansImgSrc = img.src;
+
+             answers.push({
+                 id: letterId,
+                 text: ansText,
+                 imgSrc: ansImgSrc,
+                 element: input 
+             });
+        }
     });
+
+    const isMulti = document.querySelector('input[type="checkbox"]') !== null;
+    
+    if (answers.length > 0) {
+        questions.push({
+            number: 1, 
+            text: text, 
+            images: qImages, 
+            answers: answers, 
+            isMultiSelect: isMulti
+        });
+    }
+    
     return questions;
 }
 
-// --- API CLIENT (GEMINI) ---
+// --- API CLIENT ---
 async function askGemini(question, apiKey) {
-    const parts = [];
-    
-    // Images from Question
+  const parts = [];
+  
+  // 1. Картинки
+  if (question.images.length) {
     for (const url of question.images) {
-        const img = await processImageSource(url);
-        if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.base64 } });
+        const p = await processImageSource(url);
+        if(p) parts.push(p);
     }
+  }
 
-    // Options text + images
-    let optionsText = "";
-    let imgCounter = 0;
-    for (const ans of question.answers) {
-        optionsText += `${ans.id}. ${ans.text}`;
-        if (ans.imgSrc) {
-            const img = await processImageSource(ans.imgSrc);
-            if (img) {
-                parts.push({ inline_data: { mime_type: img.mime, data: img.base64 } });
-                imgCounter++;
-                optionsText += ` [Image #${imgCounter}]`;
-            }
-        }
-        optionsText += "\n";
-    }
+  // 2. Варианты
+  let optionsText = "";
+  for (const ans of question.answers) {
+      let line = `${ans.id}. ${ans.text}`;
+      if (ans.imgSrc) {
+          const p = await processImageSource(ans.imgSrc);
+          if (p) { 
+              parts.push(p); 
+              line += ` [Image Attached]`; 
+          }
+      }
+      optionsText += line + "\n";
+  }
 
-    const prompt = `
+  const promptText = `
 Question: ${question.text}
-Type: ${question.isMultiSelect ? 'Multi-choice' : 'Single'}
+Type: ${question.isMultiSelect ? 'Multi-choice' : 'Single-choice'}
 Options:
 ${optionsText}
 
-Task:
-1. Select correct option(s).
-2. Provide a very short explanation (max 10 words) in Russian.
-
-Return JSON ONLY: 
-{"correct": ["A"], "reason": "explanation"}
+Return JSON ONLY: {"correct": ["A"]}
 `;
-    parts.unshift({ text: prompt });
+  parts.unshift({ text: promptText });
 
-    const requestBody = {
-        contents: [{ parts: parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
-    };
+  const requestBody = {
+    contents: [{ parts: parts }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
+  };
 
-    // === VISUAL LOGGING ===
-    console.group(`❓ Q${question.number}`);
-    console.log(`%c📝 Prompt:`, 'color: #2196F3;', prompt);
-    
-    const imageParts = requestBody.contents[0].parts.filter(p => p.inline_data);
-    if (imageParts.length > 0) {
-        console.groupCollapsed(`📸 Images (${imageParts.length})`);
-        imageParts.forEach((part) => {
-            const url = `data:${part.inline_data.mime_type};base64,${part.inline_data.data}`;
-            console.log('%c ', `font-size: 1px; padding: 50px; background: url('${url}') no-repeat center/contain;`);
+  // LOGS
+  console.group(`❓ ВОПРОС`);
+  console.log(`%c📝 PROMPT:`, 'color: #2196F3;', promptText);
+  const imgs = requestBody.contents[0].parts.filter(p => p.inline_data);
+  if (imgs.length) {
+      console.log(`📸 Картинки в запросе: ${imgs.length} шт.`);
+      const url = `data:${imgs[0].inline_data.mime_type};base64,${imgs[0].inline_data.data}`;
+      console.log('%c ', `font-size: 1px; padding: 50px; background: url('${url}') no-repeat center/contain;`);
+      console.log(`MIME sent: ${imgs[0].inline_data.mime_type}`); // Проверяем, какой тип уходит
+  }
+
+  for (const model of MODEL_HIERARCHY) {
+      try {
+        console.log(`📡 Sending to: ${model}`);
+        const response = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
         });
-        console.groupEnd();
-    }
 
-    // --- TRY MODELS ---
-    for (const model of MODEL_HIERARCHY) {
-        try {
-            console.log(`📡 Sending to: %c${model}`, 'color: blue; font-weight: bold');
-            const response = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            // Handle Limits (429) & Overload (503)
-            if (response.status === 429 || response.status === 503) {
-                 console.warn(`⚠️ ${model} status ${response.status}. Next...`);
-                 continue; 
-            }
-
-            if (!response.ok) {
-                 const errTxt = await response.text();
-                 throw new Error(`API Error: ${errTxt}`);
-            }
-
-            const data = await response.json();
-            const result = JSON.parse(data.candidates[0].content.parts[0].text);
-            
-            console.log(`%c✅ Result:`, 'color: green; font-weight: bold;', result);
-            console.groupEnd();
-            showStatus(`Solved via ${model}`, '#2e7d32');
-            return result;
-
-        } catch (e) {
-            console.error(`❌ Error ${model}:`, e);
+        if (response.status === 429 || response.status === 503) {
+            console.warn(`⚠️ ${model} Busy/Limit. Next...`);
+            continue; 
         }
-    }
-    console.groupEnd();
-    return null;
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API Error: ${errText}`);
+        }
+
+        const data = await response.json();
+        const result = JSON.parse(data.candidates[0].content.parts[0].text);
+        
+        console.log(`%c✅ Result:`, 'color: green', result);
+        console.groupEnd();
+        showStatus(`Done`, '#2e7d32');
+        return result;
+
+      } catch (e) {
+          console.error(`❌ Error ${model}:`, e);
+      }
+  }
+  console.groupEnd();
+  return null;
 }
 
 // --- SOLVER ---
-async function processQuestion(q, apiKey) {
-    showStatus(`Thinking Q${q.number}...`, '#1976d2');
-    q.domElement.style.opacity = '0.7';
+async function solveAll() {
+  const storage = await chrome.storage.sync.get(['geminiApiKey']);
+  if (!storage.geminiApiKey) return alert('No API Key');
 
+  const questions = extractQuestions();
+  if (!questions.length) return console.log('No questions found');
+
+  showStatus('Thinking...');
+  
+  for (let i = 0; i < questions.length; i++) {
     try {
-        const result = await askGemini(q, apiKey);
-        q.domElement.style.opacity = '1';
-
-        if (result && result.correct.length > 0) {
-            q.answers.forEach(ans => {
+        const result = await askGemini(questions[i], storage.geminiApiKey);
+        if (result && result.correct) {
+            questions[i].answers.forEach(ans => {
                 if (result.correct.includes(ans.id)) {
-                    // 1. Click
-                    if (!ans.element.checked) ans.element.click();
-                    
-                    // 2. Marker (Right Aligned)
-                    if (ans.textElement && !ans.textElement.innerHTML.includes('&bull;')) {
-                        const m = document.createElement('span');
-                        m.innerHTML = '&bull;'; 
-                        m.style.color = MARKER_COLOR; 
-                        
-                        // Right Align Styles
-                        m.style.float = 'right';      
-                        m.style.marginLeft = '10px';  
-                        m.style.fontSize = '18px';    
-                        m.style.cursor = 'help';
-                        m.title = `AI: ${result.reason}`;
-                        
-                        // Prepend to make float work correctly on same line
-                        if (ans.textElement.firstChild) {
-                            ans.textElement.insertBefore(m, ans.textElement.firstChild);
-                        } else {
-                            ans.textElement.appendChild(m);
-                        }
+                    if (!ans.element.checked) {
+                        console.log(`Clicking: ${ans.id}`);
+                        ans.element.click();
                     }
                 }
             });
         }
     } catch (e) {
-        q.domElement.style.opacity = '1';
-        showStatus(`Error Q${q.number}`, 'red');
+        console.error(e);
+        showStatus('Error', 'red');
     }
-}
-
-async function solveAll() {
-    const storage = await chrome.storage.sync.get(['geminiApiKey']);
-    if (!storage.geminiApiKey) return alert('No API Key');
-
-    const questions = extractQuestions();
-    if (!questions.length) return;
-    
-    console.group('🚀 START BATCH');
-    for (let i = 0; i < questions.length; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 1000));
-        await processQuestion(questions[i], storage.geminiApiKey);
-    }
-    console.groupEnd();
-    showStatus('Done'); hideStatus();
+  }
+  hideStatus();
 }
 
 // --- INIT ---
 function init() {
     unlockSite();
-
-    document.addEventListener('keydown', async (e) => {
-        if (e.altKey === USE_ALT_KEY && (e.code === HOTKEY_CODE || e.key === 's' || e.key === 'S' || e.key === 'ы')) {
+    window.addEventListener('keydown', async (e) => {
+        if (e.altKey === USE_ALT_KEY && (e.code === HOTKEY_CODE || e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'ы')) {
             e.preventDefault(); e.stopPropagation();
             await solveAll();
         }
     }, true);
-
-    document.addEventListener('click', async (e) => {
+    
+    window.addEventListener('click', async (e) => {
         if (e.altKey) {
-            const table = e.target.closest('table.question');
-            if (table) {
-                e.preventDefault(); e.stopPropagation();
-                const storage = await chrome.storage.sync.get(['geminiApiKey']);
-                if (!storage.geminiApiKey) return alert('No API Key');
-
-                const allTables = Array.from(document.querySelectorAll('table.question'));
-                const q = parseQuestion(table, allTables.indexOf(table));
-                if (q) await processQuestion(q, storage.geminiApiKey);
-            }
+             e.preventDefault(); e.stopPropagation();
+             await solveAll();
         }
     }, true);
-    
-    window.start = async () => await solveAll();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
