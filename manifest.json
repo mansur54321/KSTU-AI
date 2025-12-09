@@ -1,35 +1,36 @@
 {
   "manifest_version": 3,
-  "name": "AI Test Solver (Gemini 2.5)",
-  "version": "2.5",
-  "description": "Автоматическое решение тестов с помощью Google Gemini 3.0 Pro",
+  "name": "AI Stealth Solver",
+  "version": "3.0",
   "permissions": [
     "storage"
   ],
   "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://univer.kstu.kz/*",
-    "https://generativelanguage.googleapis.com/*",
-    "<all_urls>"
+    "https://platonus.kstu.kz/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://univer.kstu.kz/student/AttemptPage*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://univer.kstu.kz/*",
+        "https://platonus.kstu.kz/*",
         "file:///*"
       ],
       "js": ["content.js"],
-      "css": ["styles.css"]
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
-    }
+    "default_popup": "popup.html"
   }
 }
