@@ -38,10 +38,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     testButton.disabled = true;
     testButton.textContent = '⏳ Проверка...';
-    showStatus('Запрос к gemini-2.5-pro...', 'loading');
+    showStatus('Запрос к gemini-2.5-FLASH...', 'loading');
 
     try {
-      const MODEL = 'gemini-2.5-pro'; // Строго 2.5 Pro
+      const MODEL = 'gemini-2.5-flash'; // Строго 2.5 Pro
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       if (response.ok) {
-        showStatus('✅ Успех! Gemini 2.5 Pro доступна.', 'success');
+        showStatus('✅ Успех! Gemini 2.5 flash доступна.', 'success');
       } else {
         const errorText = await response.text();
         console.error('Error:', errorText);
