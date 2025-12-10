@@ -1,6 +1,5 @@
 // --- CONFIG ---
 const MODEL_HIERARCHY = [
-    'gemini-2.5-pro',
     'gemini-2.5-flash'
 ];
 
