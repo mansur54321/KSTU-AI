@@ -28,7 +28,27 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // ТЕСТ именно GEMINI 2.5 PRO
+  // Кнопка показа/скрытия ключа
+  const toggleButton = document.getElementById('toggleKey');
+  if (toggleButton) {
+    toggleButton.addEventListener('click', function() {
+      if (apiKeyInput.type === 'password') {
+        apiKeyInput.type = 'text';
+        toggleButton.textContent = '🙈';
+        toggleButton.title = 'Скрыть ключ';
+        toggleButton.setAttribute('aria-label', 'Скрыть ключ');
+        toggleButton.setAttribute('aria-pressed', 'true');
+      } else {
+        apiKeyInput.type = 'password';
+        toggleButton.textContent = '👁️';
+        toggleButton.title = 'Показать ключ';
+        toggleButton.setAttribute('aria-label', 'Показать ключ');
+        toggleButton.setAttribute('aria-pressed', 'false');
+      }
+    });
+  }
+
+  // ТЕСТ GEMINI 2.5 FLASH
   testButton.addEventListener('click', async function() {
     const apiKey = apiKeyInput.value.trim();
     if (!apiKey) {
@@ -41,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
     showStatus('Запрос к gemini-2.5-FLASH...', 'loading');
 
     try {
-      const MODEL = 'gemini-2.5-flash'; // Строго 2.5 Pro
+      const MODEL = 'gemini-2.5-flash'; // Быстрая модель
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,19 +71,23 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       if (response.ok) {
-        showStatus('✅ Успех! Gemini 2.5 flash доступна.', 'success');
+        showStatus('✅ Успех! Gemini 2.5 Flash доступна.', 'success');
       } else {
         const errorText = await response.text();
         console.error('Error:', errorText);
         let msg = `Ошибка ${response.status}`;
-        if (response.status === 404) msg += ': Модель не найдена (проверьте доступ)';
+        if (response.status === 404) msg += ': Модель не найдена';
+        else if (response.status === 401) msg += ': Неверный API ключ';
+        else if (response.status === 403) msg += ': Доступ запрещен';
+        else if (response.status === 429) msg += ': Превышен лимит запросов';
+        else if (response.status === 503) msg += ': Сервис временно недоступен';
         showStatus(`❌ ${msg}`, 'error');
       }
     } catch (error) {
       showStatus('❌ Ошибка сети', 'error');
     } finally {
       testButton.disabled = false;
-      testButton.textContent = '🧪 Тест API';
+      testButton.textContent = '🧪 Тест';
     }
   });
 });

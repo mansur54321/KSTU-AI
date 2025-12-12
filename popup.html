@@ -3,38 +3,173 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 360px; padding: 15px; font-family: sans-serif; background: #f4f6f8; }
-    .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; color: #333; font-size: 18px; text-align: center; }
-    .badge { background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-    input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+    :root {
+      --bg-color: #f4f6f8;
+      --container-bg: white;
+      --text-color: #333;
+      --text-secondary: #666;
+      --border-color: #ddd;
+      --badge-bg: #e1f5fe;
+      --badge-color: #0288d1;
+      --success-bg: #dff0d8;
+      --success-color: #3c763d;
+      --error-bg: #f2dede;
+      --error-color: #a94442;
+      --loading-bg: #fcf8e3;
+      --loading-color: #8a6d3b;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #1a1a2e;
+        --container-bg: #16213e;
+        --text-color: #e0e0e0;
+        --text-secondary: #a0a0a0;
+        --border-color: #3a3a5e;
+        --badge-bg: #1e3a5f;
+        --badge-color: #4fc3f7;
+        --success-bg: #1e3a2f;
+        --success-color: #81c784;
+        --error-bg: #3e1e1e;
+        --error-color: #ef9a9a;
+        --loading-bg: #3e3a1e;
+        --loading-color: #ffcc80;
+      }
+    }
+    
+    body { 
+      width: 360px; 
+      padding: 15px; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      background: var(--bg-color);
+      color: var(--text-color);
+      transition: all 0.3s ease;
+    }
+    .container { 
+      background: var(--container-bg); 
+      padding: 15px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    }
+    h2 { margin-top: 0; color: var(--text-color); font-size: 18px; text-align: center; }
+    .badge { background: var(--badge-bg); color: var(--badge-color); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+    label { color: var(--text-color); font-size: 13px; }
+    input { 
+      width: 100%; 
+      padding: 10px; 
+      margin: 10px 0; 
+      border: 1px solid var(--border-color); 
+      border-radius: 4px; 
+      box-sizing: border-box;
+      background: var(--container-bg);
+      color: var(--text-color);
+      transition: border-color 0.3s ease;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--badge-color);
+    }
+    #toggleKey {
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 5px;
+      flex: none;
+    }
+    #toggleKey:hover {
+      opacity: 0.7;
+    }
     .btn-row { display: flex; gap: 10px; }
-    button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button { 
+      flex: 1; 
+      padding: 10px; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-weight: bold;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
     #save { background: #4CAF50; color: white; }
+    #save:hover { background: #45a049; }
     #testApi { background: #2196F3; color: white; }
+    #testApi:hover { background: #1e88e5; }
     #status { margin-top: 10px; padding: 10px; border-radius: 4px; font-size: 12px; display: none; word-break: break-all; }
-    .success { background: #dff0d8; color: #3c763d; }
-    .error { background: #f2dede; color: #a94442; }
-    .loading { background: #fcf8e3; color: #8a6d3b; }
+    .success { background: var(--success-bg); color: var(--success-color); }
+    .error { background: var(--error-bg); color: var(--error-color); }
+    .loading { background: var(--loading-bg); color: var(--loading-color); }
+    
+    .hotkeys {
+      margin-top: 15px;
+      padding: 10px;
+      background: var(--badge-bg);
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .hotkeys h4 {
+      margin: 0 0 8px 0;
+      color: var(--badge-color);
+      font-size: 12px;
+    }
+    .hotkey-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 4px 0;
+      color: var(--text-secondary);
+    }
+    .hotkey-item kbd {
+      background: var(--container-bg);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 10px;
+      border: 1px solid var(--border-color);
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>AI Helper <span class="badge">Gemini 2.5 Pro</span></h2>
+    <h2>AI Helper <span class="badge">Gemini 2.5 Flash</span></h2>
     <label>Введите API Key (Google AI Studio):</label>
-    <input type="text" id="apiKey" placeholder="AIzaSy...">
+    <div style="position: relative;">
+      <input type="password" id="apiKey" placeholder="AIzaSy..." style="padding-right: 35px;">
+      <button id="toggleKey" type="button" aria-label="Показать/скрыть ключ" aria-pressed="false" title="Показать/скрыть ключ">👁️</button>
+    </div>
     
     <div class="btn-row">
-      <button id="save">Сохранить</button>
+      <button id="save">💾 Сохранить</button>
       <button id="testApi">🧪 Тест</button>
     </div>
 
     <div id="status"></div>
     
-    <p style="font-size: 11px; color: #666; margin-top: 15px;">
-      Используется модель: <b>gemini-2.5-pro</b><br>
-      Это стабильная и мощная версия.<br>
-      Если тест выдает ошибку 404 — проверьте доступность модели в вашем регионе или создайте новый ключ.
+    <div class="hotkeys">
+      <h4>⌨️ Горячие клавиши:</h4>
+      <div class="hotkey-item">
+        <span>Решить все вопросы</span>
+        <kbd>Alt + S</kbd>
+      </div>
+      <div class="hotkey-item">
+        <span>Решить один вопрос</span>
+        <kbd>Alt + Click</kbd>
+      </div>
+    </div>
+    
+    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
+      Используется модель: <b>gemini-2.5-flash</b><br>
+      Это быстрая и эффективная версия.<br>
+      Если тест выдает ошибку 404 — проверьте доступность модели в вашем регионе.
     </p>
   </div>
   <script src="popup.js"></script>

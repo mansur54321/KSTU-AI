@@ -24,6 +24,7 @@
   background-color: #d4edda !important;
   border-left: 4px solid #28a745 !important;
   animation: highlight 0.5s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease !important;
 }
 
 .ai-correct-answer .text {
@@ -39,12 +40,15 @@
 @keyframes highlight {
   0% {
     background-color: #fff;
+    transform: scale(1);
   }
   50% {
     background-color: #a8e6a3;
+    transform: scale(1.01);
   }
   100% {
     background-color: #d4edda;
+    transform: scale(1);
   }
 }
 
@@ -54,4 +58,24 @@
   color: #28a745;
   font-weight: bold;
   margin-right: 5px;
+}
+
+/* Поддержка темной темы */
+@media (prefers-color-scheme: dark) {
+  .ai-correct-answer {
+    background-color: #1e3a2f !important;
+    border-left-color: #4caf50 !important;
+  }
+  
+  .ai-correct-answer .text {
+    color: #a5d6a7 !important;
+  }
+  
+  .ai-correct-answer .num {
+    color: #4caf50 !important;
+  }
+  
+  .ai-correct-answer .num::before {
+    color: #4caf50;
+  }
 }

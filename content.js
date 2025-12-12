@@ -266,6 +266,11 @@ async function processQuestion(q, apiKey) {
                         console.log(`Clicking: ${ans.id}`);
                         ans.element.click();
                     }
+                    // Добавляем визуальную подсветку правильного ответа
+                    const row = ans.element.closest('tr') || ans.element.closest('.answer-variant');
+                    if (row) {
+                        row.classList.add('ai-correct-answer');
+                    }
                 }
             });
         }
