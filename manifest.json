@@ -7,7 +7,8 @@
     "storage"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "http://159.223.3.49:3000/*" 
   ],
   "background": {
     "service_worker": "src/background/background.js"
