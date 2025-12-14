@@ -9,6 +9,23 @@
   "host_permissions": [
     "<all_urls>"
   ],
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "AI Stealth Solver",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -22,21 +39,14 @@
         "*127.0.0.1*",
         "file://*"
       ],
-      "js": ["content.js"],
-      "css": ["styles.css"],
+      "js": [
+        "src/content/content.js"
+      ],
+      "css": [
+        "src/content/styles.css"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
-    }
-  }
+  ]
 }
