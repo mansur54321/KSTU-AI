@@ -1,69 +1,92 @@
 document.addEventListener('DOMContentLoaded', function() {
-  const apiKeyInput = document.getElementById('apiKey');
+  const keysInput = document.getElementById('apiKeysInput');
   const saveButton = document.getElementById('save');
-  const testButton = document.getElementById('testApi');
+  const checkButton = document.getElementById('check');
   const statusDiv = document.getElementById('status');
+  const resultsDiv = document.getElementById('checkResults');
+  const progressFill = document.getElementById('keyProgress');
+  const countText = document.getElementById('keyCountText');
 
-  if (!apiKeyInput || !saveButton || !testButton) return;
+  function updateUI(keys) {
+    const count = keys.length;
+    const percentage = Math.min((count / 10) * 100, 100);
+    progressFill.style.width = `${percentage}%`;
+    
+    if (count === 0) progressFill.style.background = '#eee';
+    else if (count < 3) progressFill.style.background = '#ff5722';
+    else progressFill.style.background = '#4caf50';
 
-  chrome.storage.sync.get(['geminiApiKey'], function(result) {
-    if (result.geminiApiKey) apiKeyInput.value = result.geminiApiKey;
-  });
-
-  function showStatus(text, type) {
-    statusDiv.textContent = text;
-    statusDiv.className = type;
-    statusDiv.style.display = 'block';
+    countText.textContent = `${count} ключей`;
   }
 
+  // Load
+  chrome.storage.sync.get(['geminiApiKeys'], function(result) {
+    if (result.geminiApiKeys && Array.isArray(result.geminiApiKeys)) {
+      keysInput.value = result.geminiApiKeys.join('\n');
+      updateUI(result.geminiApiKeys);
+    }
+  });
+
+  // Input Monitor
+  keysInput.addEventListener('input', () => {
+    const raw = keysInput.value.split('\n').map(k => k.trim()).filter(k => k.length > 10);
+    updateUI(raw);
+  });
+
+  // Save
   saveButton.addEventListener('click', function() {
-    const apiKey = apiKeyInput.value.trim();
-    if (!apiKey) {
-      showStatus('Введите ключ!', 'error');
+    const keys = keysInput.value.split('\n')
+      .map(k => k.trim())
+      .filter(k => k.length > 20);
+
+    if (keys.length === 0) {
+      statusDiv.textContent = '❌ Нет ключей!';
+      statusDiv.style.display = 'block';
       return;
     }
-    chrome.storage.sync.set({ geminiApiKey: apiKey }, function() {
-      showStatus('✅ Сохранено', 'success');
+
+    chrome.storage.sync.set({ geminiApiKeys: keys }, function() {
+      statusDiv.textContent = `✅ Сохранено ${keys.length} шт.`;
+      statusDiv.style.display = 'block';
       setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
     });
   });
 
-  // ТЕСТ именно GEMINI 2.5 PRO
-  testButton.addEventListener('click', async function() {
-    const apiKey = apiKeyInput.value.trim();
-    if (!apiKey) {
-      showStatus('Нет ключа', 'error');
-      return;
+  // Checker
+  checkButton.addEventListener('click', async function() {
+    const keys = keysInput.value.split('\n').map(k => k.trim()).filter(k => k.length > 20);
+    if (keys.length === 0) return;
+
+    resultsDiv.innerHTML = '<div style="text-align:center">⏳ Проверка...</div>';
+    checkButton.disabled = true;
+
+    let html = '';
+    let validCount = 0;
+
+    for (const key of keys) {
+        const masked = key.substring(0, 8) + '...';
+        try {
+            // Тестовый запрос к 2.5-flash (быстрая)
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
+            });
+            
+            if (res.ok) {
+                validCount++;
+                html += `<div class="key-row"><span>${masked}</span><span class="key-ok">OK ✅</span></div>`;
+            } else {
+                html += `<div class="key-row"><span>${masked}</span><span class="key-bad">ERR ❌</span></div>`;
+            }
+        } catch (e) {
+            html += `<div class="key-row"><span>${masked}</span><span class="key-bad">NET ⚠️</span></div>`;
+        }
     }
 
-    testButton.disabled = true;
-    testButton.textContent = '⏳ Проверка...';
-    showStatus('Запрос к gemini-2.5-FLASH...', 'loading');
-
-    try {
-      const MODEL = 'gemini-2.5-flash'; // Строго 2.5 Pro
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: "Hello" }] }]
-        })
-      });
-
-      if (response.ok) {
-        showStatus('✅ Успех! Gemini 2.5 flash доступна.', 'success');
-      } else {
-        const errorText = await response.text();
-        console.error('Error:', errorText);
-        let msg = `Ошибка ${response.status}`;
-        if (response.status === 404) msg += ': Модель не найдена (проверьте доступ)';
-        showStatus(`❌ ${msg}`, 'error');
-      }
-    } catch (error) {
-      showStatus('❌ Ошибка сети', 'error');
-    } finally {
-      testButton.disabled = false;
-      testButton.textContent = '🧪 Тест API';
-    }
+    resultsDiv.innerHTML = html;
+    checkButton.disabled = false;
+    statusDiv.textContent = `Рабочих: ${validCount} из ${keys.length}`;
+    statusDiv.style.display = 'block';
   });
 });

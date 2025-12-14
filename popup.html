@@ -3,39 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 360px; padding: 15px; font-family: sans-serif; background: #f4f6f8; }
-    .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; color: #333; font-size: 18px; text-align: center; }
-    .badge { background: #e1f5fe; color: #0288d1; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-    input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-    .btn-row { display: flex; gap: 10px; }
-    button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    #save { background: #4CAF50; color: white; }
-    #testApi { background: #2196F3; color: white; }
-    #status { margin-top: 10px; padding: 10px; border-radius: 4px; font-size: 12px; display: none; word-break: break-all; }
-    .success { background: #dff0d8; color: #3c763d; }
-    .error { background: #f2dede; color: #a94442; }
-    .loading { background: #fcf8e3; color: #8a6d3b; }
+    body { width: 340px; padding: 15px; font-family: 'Segoe UI', sans-serif; background: #f8f9fa; }
+    .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    h2 { margin: 0 0 15px 0; text-align: center; font-size: 18px; color: #333; }
+    
+    textarea {
+      width: 100%; height: 100px; padding: 10px;
+      border: 2px solid #eee; border-radius: 8px;
+      box-sizing: border-box; font-family: monospace; font-size: 11px;
+      resize: vertical; margin-bottom: 5px; white-space: pre;
+    }
+    textarea:focus { border-color: #7928CA; outline: none; }
+
+    .key-meter { margin-bottom: 15px; }
+    .progress-bg { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff5722, #4caf50); transition: width 0.3s; }
+    .key-count { font-size: 11px; color: #666; text-align: right; margin-top: 3px; }
+
+    .btn-group { display: flex; gap: 10px; }
+    button {
+      flex: 1; padding: 10px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: bold; color: white;
+      transition: transform 0.1s;
+    }
+    button:active { transform: scale(0.98); }
+    #save { background: #212121; }
+    #check { background: #2196F3; }
+    
+    #status { margin-top: 10px; font-size: 12px; text-align: center; display: none; }
+    
+    #checkResults {
+        margin-top: 10px; max-height: 150px; overflow-y: auto;
+        font-size: 11px; border-top: 1px solid #eee; padding-top: 5px;
+    }
+    .key-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
+    .key-ok { color: green; font-weight: bold; }
+    .key-bad { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>AI Helper <span class="badge">Gemini 2.5 Pro</span></h2>
-    <label>Введите API Key (Google AI Studio):</label>
-    <input type="text" id="apiKey" placeholder="AIzaSy...">
+  <div class="card">
+    <h2>🔑 Управление ключами</h2>
     
-    <div class="btn-row">
-      <button id="save">Сохранить</button>
-      <button id="testApi">🧪 Тест</button>
+    <label style="font-size: 12px; font-weight: bold;">Список ключей (каждый с новой строки):</label>
+    <textarea id="apiKeysInput" placeholder="AIzaSy..."></textarea>
+    
+    <div class="key-meter">
+      <div class="progress-bg"><div class="progress-fill" id="keyProgress"></div></div>
+      <div class="key-count" id="keyCountText">0 ключей</div>
+    </div>
+
+    <div class="btn-group">
+        <button id="save">💾 Сохранить</button>
+        <button id="check">🔍 Проверить</button>
     </div>
 
     <div id="status"></div>
-    
-    <p style="font-size: 11px; color: #666; margin-top: 15px;">
-      Используется модель: <b>gemini-2.5-pro</b><br>
-      Это стабильная и мощная версия.<br>
-      Если тест выдает ошибку 404 — проверьте доступность модели в вашем регионе или создайте новый ключ.
-    </p>
+    <div id="checkResults"></div>
   </div>
   <script src="popup.js"></script>
 </body>
