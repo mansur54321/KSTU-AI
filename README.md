@@ -2,7 +2,6 @@
 
 <img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/6a22d5dc-df47-4a41-84c9-213664bc94f8" />
 
-
 Продвинутое расширение для Chrome, которое помогает проходить онлайн-тесты, оставаясь незаметным. Использует мощь **Google Gemini 2.5 flash/pro** для анализа вопросов и изображений, автоматически обходит системы защиты и предоставляет объяснения ответов.
 
 ---
@@ -18,12 +17,13 @@
 *   ✅ `platonus.enu.kz`
 *   ✅ `platonus.amu.kz`
 *   ✅ *И любые другие домены вида `*.platonus.*`*
-
+![ezgif-1bb3958c41e391b8](https://github.com/user-attachments/assets/0e76fa5d-38c4-4b84-bfa1-2bece9b3777f)
 ### 2. Система Univer
 Поддерживается классический интерфейс тестирования.
 *   ✅ `univer.kstu.kz`
 *   ✅ `univer.kaznu.kz`
 *   ✅ *И любые другие домены вида `*.univer.*`*
+![recording_2025-12-15_17-14-03-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/7d391c51-d9a4-42b2-ae9b-badfba8719db)
 
 > **Примечание:** Расширение само определяет тип системы (Platonus или Univer) и применяет соответствующий алгоритм поиска вопросов и ответов.
 
