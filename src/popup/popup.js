@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const mask = key.substring(0, 6) + '...';
             try {
                 // Используем 2.5-flash для проверки (она легкая)
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
