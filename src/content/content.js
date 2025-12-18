@@ -1,3 +1,7 @@
+// ============================================================================
+// AI SOLVER v4.7 (Full Stats + Stealth)
+// ============================================================================
+
 const MODEL_HIERARCHY = [
     'gemini-3-flash-preview',
     'gemini-2.5-flash'
@@ -5,14 +9,39 @@ const MODEL_HIERARCHY = [
 
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
 const HOTKEY_CODE = 'KeyS';
-const MARKER_COLOR = '#888888'; // Серый цвет маркера
+const MARKER_COLOR = '#888888';
 
 let currentKeyIndex = 0;
 
-console.log(`%c🚀 AI Solver v4.6: CONFIG & DEBUG`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
+console.log(`%c🚀 AI Solver v4.7: STATS RESTORED`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
 
 // ============================================================================
-// 1. UI HELPERS
+// 1. DATA EXTRACTORS (NEW)
+// ============================================================================
+
+function getStudentName() {
+    try {
+        // 1. Moodle (User menu or login info)
+        const moodleName = document.querySelector('.userbutton .usertext') || 
+                           document.querySelector('.logininfo a') ||
+                           document.querySelector('.userinitials'); // New Moodle themes
+        if (moodleName) return moodleName.innerText.trim();
+
+        // 2. Platonus (Dropdown or Profile)
+        const platonusName = document.querySelector('.dropdown-user .fw-semibold') || 
+                             document.querySelector('.user-info .name');
+        if (platonusName) return platonusName.innerText.trim();
+
+        // 3. Univer / Generic
+        const univerName = document.querySelector('.username') || document.querySelector('#username_logged_in');
+        if (univerName) return univerName.innerText.trim();
+
+    } catch (e) {}
+    return "Аноним";
+}
+
+// ============================================================================
+// 2. UI HELPERS
 // ============================================================================
 let statusIndicator = null;
 let solutionPanel = null;
@@ -46,8 +75,8 @@ function showSolutionPanel(lines) {
     `;
     
     const header = document.createElement('div');
-    header.style.cssText = "display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #ccc; padding-bottom:5px;";
-    header.innerHTML = `<span style="font-weight:bold; color:#2e7d32">AI Ответ:</span><span style="cursor:pointer; font-weight:bold;">✕</span>`;
+    header.style.cssText = "display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #eee; padding-bottom:5px;";
+    header.innerHTML = `<b>AI Ответ:</b><span style="cursor:pointer; font-weight:bold;">×</span>`;
     header.querySelector('span:last-child').onclick = () => solutionPanel.remove();
     solutionPanel.appendChild(header);
 
@@ -61,7 +90,7 @@ function showSolutionPanel(lines) {
 }
 
 function hideStatus() {
-    if (statusIndicator) setTimeout(() => statusIndicator.style.display = 'none', 4000);
+    if (statusIndicator) setTimeout(() => statusIndicator.style.display = 'none', 3000);
 }
 
 function unlockSite() {
@@ -76,7 +105,7 @@ function unlockSite() {
 }
 
 // ============================================================================
-// 2. IMAGE PROCESSING
+// 3. IMAGE PROCESSING
 // ============================================================================
 async function processImageSource(url) {
     if (!url) return null;
@@ -85,6 +114,7 @@ async function processImageSource(url) {
             const comma = url.indexOf(',');
             return { inline_data: { mime_type: 'image/jpeg', data: url.substring(comma + 1) } };
         }
+        
         const response = await fetch(url);
         if (!response.ok) throw new Error('Fetch error');
         const blob = await response.blob();
@@ -100,7 +130,6 @@ async function processImageSource(url) {
             reader.readAsDataURL(blob);
         });
     } catch (e) {
-        console.warn('⚠️ Image fetch failed:', url);
         return null;
     }
 }
@@ -146,12 +175,12 @@ async function getAnnotatedMap(bgImg, dropzones) {
 }
 
 // ============================================================================
-// 3. PARSERS
+// 4. PARSERS
 // ============================================================================
 function extractQuestions() {
     const questions = [];
 
-    // --- A. MOODLE ---
+    // --- A. MOODLE (Universal) ---
     const moodleQuestions = document.querySelectorAll('.que');
     if (moodleQuestions.length > 0) {
         moodleQuestions.forEach((el, i) => {
@@ -190,7 +219,7 @@ function extractQuestions() {
                     domElement: el
                 });
             } 
-            // Choice
+            // Regular Choice
             else {
                 const options = el.querySelectorAll('.answer div, .answer li, table.answer tr');
                 options.forEach((opt, idx) => {
@@ -200,7 +229,6 @@ function extractQuestions() {
                          const txt = opt.innerText.trim();
                          const img = opt.querySelector('img')?.src;
                          const targetEl = input || label || opt;
-                         
                          answers.push({
                              id: String.fromCharCode(65 + idx),
                              text: txt,
@@ -311,7 +339,7 @@ function extractQuestions() {
 }
 
 // ============================================================================
-// 4. API CLIENT (WITH FULL LOGGING)
+// 5. API CLIENT (Returns result + model name)
 // ============================================================================
 async function askGemini(q, apiKeys) {
     const parts = [];
@@ -359,11 +387,8 @@ async function askGemini(q, apiKeys) {
         });
     }
 
-    // --- FULL DEBUG LOG ---
-    console.groupCollapsed(`🚀 Request Q${q.number || ''} (${q.platform})`);
-    console.log("📸 Images count:", imgCount);
-    if(imgCount > 0) console.log("First MIME:", parts[0]?.inline_data?.mime_type);
-    console.log("📝 Text Prompt:\n", parts[parts.length - 1].text);
+    console.groupCollapsed(`🚀 Sending Request (Images: ${imgCount})`);
+    console.log("Prompt:", parts[parts.length - 1].text);
     console.groupEnd();
 
     const requestBody = {
@@ -375,30 +400,23 @@ async function askGemini(q, apiKeys) {
         for (let i = 0; i < apiKeys.length; i++) {
             const keyIndex = (currentKeyIndex + i) % apiKeys.length;
             try {
-                console.log(`📡 Sending to ${model}... (Key ${keyIndex})`);
+                console.log(`📡 Trying ${model}...`);
                 const res = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKeys[keyIndex]}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
                 });
 
-                if (res.status === 429 || res.status === 503) {
-                     console.warn(`⚠️ Key ${keyIndex} exhausted.`);
-                     continue;
-                }
+                if (res.status === 429 || res.status === 503) continue;
                 if (!res.ok) throw new Error(await res.text());
 
                 const data = await res.json();
                 currentKeyIndex = keyIndex;
-                
-                // Log Response
-                console.groupCollapsed(`✅ Response from ${model}`);
-                console.log("Raw:", data);
                 const resultText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                 const json = JSON.parse(resultText);
-                console.log("Parsed:", json);
-                console.groupEnd();
-
-                return json;
+                console.log("✅ Success:", json);
+                
+                // RETURN DATA + MODEL NAME FOR STATS
+                return { result: json, model: model };
 
             } catch (e) { console.error("API Error:", e); }
         }
@@ -407,7 +425,7 @@ async function askGemini(q, apiKeys) {
 }
 
 // ============================================================================
-// 5. VISUALIZATION & CONTROL
+// 6. VISUALIZATION & LOGIC
 // ============================================================================
 
 // Floating Badge (Moodle)
@@ -439,8 +457,6 @@ function createStealthBadge(targetElement, text, color) {
 function injectInlineMarker(targetElement, text) {
     if (!targetElement) return;
     if (targetElement.innerHTML.includes('ai-marker')) return;
-    
-    // Вставляем точку
     const marker = document.createElement('span');
     marker.className = 'ai-marker';
     marker.innerHTML = ` ${text}`;
@@ -452,33 +468,45 @@ async function processQuestion(q, apiKeys) {
     if (q.domElement) q.domElement.style.opacity = '0.6';
     showStatus("Thinking...");
 
-    // Очистка
     document.querySelectorAll('.ai-stealth-badge').forEach(el => el.remove());
     document.querySelectorAll('.ai-marker').forEach(el => el.remove());
     if (solutionPanel) solutionPanel.remove();
 
-    // Загрузка настроек
     const settings = await chrome.storage.sync.get(['cfgAutoClick', 'cfgMarker']);
-    // По умолчанию включено (если undefined)
     const doClick = settings.cfgAutoClick !== false;
     const doMark = settings.cfgMarker !== false;
 
-    console.log(`⚙️ Config: Click=${doClick}, Marker=${doMark}`);
-
     try {
-        const result = await askGemini(q, apiKeys);
+        const responseData = await askGemini(q, apiKeys);
+        
+        if (!responseData) throw new Error("No response");
+        const { result, model } = responseData;
+
         if (q.domElement) q.domElement.style.opacity = '1';
 
-        // --- SCENARIO A: MOODLE DRAG & DROP ---
+        // --- STATS ---
+        let answerLog = "";
+        if (result.pairs) answerLog = "Drag & Drop Solution";
+        else if (result.correct) answerLog = result.correct.join(', ');
+
+        chrome.runtime.sendMessage({
+            action: 'log_event',
+            type: 'solve_success',
+            model: model,
+            meta: { 
+                student: getStudentName(),
+                platform: q.platform,
+                question: q.text.substring(0, 150), // Отправляем вопрос
+                answer_ai: answerLog, // Отправляем ответ
+                has_images: (q.images?.length > 0 || q.type === 'moodle_dd')
+            }
+        });
+
+        // --- MOODLE D&D ---
         if (result && result.pairs && q.type === 'moodle_dd') {
             const solutionLines = [];
-            // В D&D кликать бесполезно, только маркируем
             if (doMark) {
-                // Метки на предметах
-                q.answers.forEach(ans => {
-                    createStealthBadge(ans.element, `(${ans.id})`, '#555');
-                });
-                // Метки на зонах
+                q.answers.forEach(ans => createStealthBadge(ans.element, `(${ans.id})`, '#555'));
                 result.pairs.forEach(pair => {
                     const item = q.answers.find(a => a.id === pair.item);
                     const zone = q.dropzones[pair.zone - 1];
@@ -486,7 +514,7 @@ async function processQuestion(q, apiKeys) {
                         createStealthBadge(zone, `→ ${item.id}`, '#2e7d32');
                         let desc = item.text || (item.imgSrc ? "[Img]" : "???");
                         if (desc.length > 20) desc = desc.substring(0, 17) + "..";
-                        solutionLines.push(`<b>Zone ${pair.zone}</b> ➝ <b>Item ${item.id}</b> <span style="color:#777">(${desc})</span>`);
+                        solutionLines.push(`<b>Зона ${pair.zone}</b> ➜ <b>${item.id}</b> <span style="color:#888">${desc}</span>`);
                     }
                 });
                 showStatus("Check Visuals!", "#2e7d32");
@@ -494,23 +522,19 @@ async function processQuestion(q, apiKeys) {
             }
         } 
         
-        // --- SCENARIO B: CHOICE (ALL PLATFORMS) ---
+        // --- CHOICE ---
         else if (result && result.correct) {
             let found = false;
             q.answers.forEach(ans => {
                 if (result.correct.includes(ans.id) || result.correct.some(c => ans.text.includes(c))) {
                     found = true;
-                    
-                    // 1. CLICK
                     if (doClick && !ans.element.checked) {
                         ans.element.click();
-                        console.log(`🖱️ Clicked option ${ans.id}`);
+                        console.log(`🖱️ Clicked ${ans.id}`);
                     }
-                    
-                    // 2. MARKER
                     if (doMark) {
                         if (q.platform === 'moodle') {
-                            createStealthBadge(ans.element, `✓ Correct`, '#2e7d32');
+                            createStealthBadge(ans.element, `✓`, '#2e7d32');
                         } else {
                             if (ans.textElement) injectInlineMarker(ans.textElement, '•');
                         }
