@@ -1,64 +1,59 @@
-// Адрес твоего сервера
+// ============================================================================
+// BACKGROUND WORKER (Stats & Server Sync)
+// ============================================================================
+
 const STATS_SERVER_URL = 'http://159.223.3.49:3000/api/log';
 
-// Генерация UUID (уникальный ID пользователя)
-function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-
-// Получить или создать ID пользователя
+// 1. Генерация уникального ID пользователя (если нет)
 async function getUserId() {
-    const result = await chrome.storage.sync.get(['userId']);
-    if (result.userId) {
-        return result.userId;
-    } else {
-        const newId = generateUUID();
-        await chrome.storage.sync.set({ userId: newId });
-        // Отправляем событие "Установка"
-        sendLog('install', 'system', { version: chrome.runtime.getManifest().version });
-        return newId;
-    }
+    const data = await chrome.storage.sync.get(['userId']);
+    if (data.userId) return data.userId;
+    
+    const newId = 'user-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+    await chrome.storage.sync.set({ userId: newId });
+    return newId;
 }
 
-// Функция отправки лога
-async function sendLog(eventType, model = 'unknown', meta = {}) {
+// 2. Отправка лога на сервер
+async function sendLog(type, model, meta = {}) {
     try {
         const userId = await getUserId();
         
-        await fetch(STATS_SERVER_URL, {
+        // Отправка на сервер (без ожидания ответа, fire-and-forget)
+        fetch(STATS_SERVER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 user_id: userId,
-                event_type: eventType,
+                event_type: type,
                 model: model,
+                timestamp: new Date().toISOString(),
                 meta: meta
             })
-        });
-        console.log('📊 Stat sent:', eventType);
+        }).catch(err => console.log('Stats sending failed (server offline?)', err));
+
+        // Локальный счетчик для Popup (AdGuard style)
+        if (type === 'solve_success') {
+            const data = await chrome.storage.sync.get(['solvedCount']);
+            const newCount = (data.solvedCount || 0) + 1;
+            await chrome.storage.sync.set({ solvedCount: newCount });
+        }
+
     } catch (e) {
-        console.error('Stats error:', e);
+        console.error('Background error:', e);
     }
 }
 
-// Слушатель сообщений от content.js и popup.js
+// 3. Слушатель сообщений от content.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'log_event') {
         sendLog(request.type, request.model, request.meta);
+        sendResponse({status: "logged"});
     }
+    return true;
 });
 
-// Лог при запуске браузера/расширения
-chrome.runtime.onStartup.addListener(() => {
-    sendLog('startup', 'system');
-});
-
-// Лог при установке
-chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'install') {
-        getUserId(); // Инициирует создание ID и лог
-    }
+// 4. Событие установки
+chrome.runtime.onInstalled.addListener(() => {
+    sendLog('install', 'system', { version: chrome.runtime.getManifest().version });
 });
