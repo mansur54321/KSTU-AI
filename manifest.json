@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI Stealth Solver (Universal)",
-  "version": "2.1.0",
-  "description": "Помощник для сдачи тестов в системах Platonus и Univer с использованием Gemini AI",
+  "version": "3.0.0",
+  "description": "Помощник для сдачи тестов в системах Platonus и Univer и Moodle с использованием Gemini AI",
   "permissions": [
     "storage"
   ],
