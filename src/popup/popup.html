@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
-  <!-- Подключаем иконки (можно локальные или CDN) -->
+  <!-- Иконки FontAwesome (можно через CDN или локально) -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -16,18 +16,21 @@
         <span>adguard</span>
       </div>
       <div class="icons">
-        <i class="fas fa-sync-alt" id="refresh-stats"></i>
-        <i class="fas fa-pause"></i>
-        <i class="fas fa-cog" id="open-settings" title="Настройки"></i>
+        <i class="fas fa-sync-alt" id="refresh-stats" title="Refresh"></i>
+        <i class="fas fa-cog" id="open-settings" title="Settings"></i>
       </div>
     </div>
 
     <div class="status-container">
-      <div class="site-name" id="current-site">youtube.com</div>
-      <div class="blocked-count">Blocked: <span id="solve-count">0</span></div>
-      <div class="total-blocked">Total blocked: <span id="total-count">240,002</span></div>
+      <div class="site-name" id="current-site">google.com</div>
+      <div class="status-text" id="status-text">Protection is enabled</div>
       
-      <!-- ГЛАВНАЯ КНОПКА (Вкл/Выкл бота) -->
+      <div class="blocked-count">
+        <span id="solve-count">0</span>
+        <span class="label">ads blocked</span>
+      </div>
+
+      <!-- ГЛАВНАЯ КНОПКА (ВКЛ/ВЫКЛ РАСШИРЕНИЯ) -->
       <div class="toggle-wrapper">
         <div class="toggle-circle" id="master-switch">
           <i class="fas fa-check"></i>
@@ -36,25 +39,20 @@
     </div>
 
     <div class="menu-list">
-      <div class="menu-item" id="manual-solve">
-        <i class="fas fa-crosshairs item-icon" style="color: #ff7e67;"></i>
-        <span>Block ads manually (Alt+Click)</span>
-      </div>
       <div class="menu-item">
-        <i class="fas fa-bars item-icon" style="color: #67b279;"></i>
+        <i class="fas fa-filter item-icon" style="color: #fff;"></i>
         <span>Open filtering log</span>
       </div>
       <div class="menu-item">
-        <i class="fas fa-thumbs-down item-icon" style="color: #eebb4d;"></i>
-        <span>Report an issue</span>
+        <i class="fas fa-crosshairs item-icon" style="color: #fff;"></i>
+        <span>Block element on this page</span>
       </div>
     </div>
     
     <div class="footer">
-      Protect your mobile device
+      AdGuard for Windows
       <div class="os-icons">
-        <i class="fab fa-apple"></i>
-        <i class="fab fa-android"></i>
+        <i class="fab fa-windows"></i>
       </div>
     </div>
   </div>
@@ -63,23 +61,46 @@
   <div id="settings-view" style="display: none;">
     <div class="header">
       <div class="logo" id="back-to-main" style="cursor: pointer;">
-        <i class="fas fa-arrow-left"></i> Назад
-      </div>
-      <div class="icons">
-        <i class="fas fa-cog"></i>
+        <i class="fas fa-arrow-left"></i> Settings
       </div>
     </div>
+    
     <div class="settings-content">
-      <h3>API Keys Management</h3>
-      <textarea id="apiKeysInput" placeholder="Вставьте ключи Gemini (по 1 на строку)..."></textarea>
+      <!-- 1. ПОВЕДЕНИЕ -->
+      <div class="section-title">BEHAVIOR</div>
+      
+      <div class="setting-row">
+        <span><i class="fas fa-mouse-pointer"></i> Auto-Click Answer</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cfg-autoclick">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <span><i class="fas fa-eye"></i> Show Visual Marker</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cfg-marker">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- 2. КЛЮЧИ -->
+      <div class="section-title" style="margin-top: 15px;">API KEYS (GEMINI)</div>
+      <textarea id="apiKeysInput" placeholder="Paste keys here (one per line)..."></textarea>
       
       <div class="key-meter">
         <div class="progress-bg"><div class="progress-fill" id="keyProgress"></div></div>
-        <div class="key-count" id="keyCountText">0 ключей</div>
+        <div class="key-count" id="keyCountText">0 keys loaded</div>
       </div>
 
-      <button id="save-keys" class="adg-btn">Сохранить настройки</button>
-      <button id="check-keys" class="adg-btn secondary">Проверить ключи</button>
+      <div class="btn-group">
+        <button id="save-keys" class="adg-btn primary">Save</button>
+        <button id="check-keys" class="adg-btn secondary">Check Keys</button>
+      </div>
+
+      <!-- РЕЗУЛЬТАТЫ ПРОВЕРКИ -->
+      <div id="check-results"></div>
       <div id="status-msg"></div>
     </div>
   </div>
