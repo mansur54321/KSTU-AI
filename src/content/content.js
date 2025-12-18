@@ -5,7 +5,8 @@
 // --- CONFIG ---
 // Используем только Flash (быстрая и дешевая)
 const MODEL_HIERARCHY = [
-    'gemini-2.5-flash'
+    'gemini-3-flash',
+    'gemini-2.5-flash'    
 ];
 
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
