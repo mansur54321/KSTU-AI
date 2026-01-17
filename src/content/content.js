@@ -1,5 +1,5 @@
 // ============================================================================
-// AI SOLVER v4.7 (Full Stats + Stealth)
+// AI SOLVER v5.0 (Stealth + Retry + i18n)
 // ============================================================================
 
 const MODEL_HIERARCHY = [
@@ -7,41 +7,115 @@ const MODEL_HIERARCHY = [
     'gemini-2.5-flash'
 ];
 
-const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
+const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const HOTKEY_CODE = 'KeyS';
 const MARKER_COLOR = '#888888';
 
+// Retry config
+const RETRY_CONFIG = {
+    maxAttempts: 3,
+    baseDelay: 1000,
+    backoffMultiplier: 2
+};
+
 let currentKeyIndex = 0;
+let isExtensionEnabled = true;
 
-console.log(`%c🚀 AI Solver v4.7: STATS RESTORED`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
+console.log(`%c🚀 AI Solver v5.1: STEALTH MODE`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
 
 // ============================================================================
-// 1. DATA EXTRACTORS (NEW)
+// 0. INITIALIZATION CHECK
 // ============================================================================
+async function checkEnabled() {
+    const data = await chrome.storage.sync.get(['isEnabled']);
+    isExtensionEnabled = data.isEnabled !== false;
+    return isExtensionEnabled;
+}
 
+// ============================================================================
+// 1. STEALTH NOTIFICATION SYSTEM (Mimics browser toast)
+// ============================================================================
+let stealthNotification = null;
+
+function showStealthNotify(message, type = 'info', duration = 3000) {
+    if (stealthNotification) {
+        stealthNotification.remove();
+    }
+
+    // Stealth style: looks like a system notification
+    const colors = {
+        info: { bg: 'rgba(50, 50, 50, 0.95)', border: '#555' },
+        success: { bg: 'rgba(40, 60, 40, 0.95)', border: '#4a7c4a' },
+        error: { bg: 'rgba(60, 40, 40, 0.95)', border: '#7c4a4a' },
+        warning: { bg: 'rgba(60, 55, 35, 0.95)', border: '#7c6a3a' }
+    };
+
+    const style = colors[type] || colors.info;
+
+    stealthNotification = document.createElement('div');
+    stealthNotification.className = 'ai-stealth-notify';
+    stealthNotification.innerHTML = `<span>${message}</span>`;
+    stealthNotification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: ${style.bg};
+        color: #e0e0e0;
+        padding: 12px 18px;
+        border-radius: 8px;
+        border-left: 3px solid ${style.border};
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        z-index: 2147483647;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(10px);
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+        max-width: 280px;
+    `;
+
+    document.body.appendChild(stealthNotification);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        stealthNotification.style.opacity = '1';
+        stealthNotification.style.transform = 'translateY(0)';
+    });
+
+    // Auto-hide
+    setTimeout(() => {
+        if (stealthNotification) {
+            stealthNotification.style.opacity = '0';
+            stealthNotification.style.transform = 'translateY(20px)';
+            setTimeout(() => stealthNotification?.remove(), 300);
+        }
+    }, duration);
+}
+
+// ============================================================================
+// 2. DATA EXTRACTORS
+// ============================================================================
 function getStudentName() {
     try {
-        // 1. Moodle (User menu or login info)
-        const moodleName = document.querySelector('.userbutton .usertext') || 
-                           document.querySelector('.logininfo a') ||
-                           document.querySelector('.userinitials'); // New Moodle themes
+        const moodleName = document.querySelector('.userbutton .usertext') ||
+            document.querySelector('.logininfo a') ||
+            document.querySelector('.userinitials');
         if (moodleName) return moodleName.innerText.trim();
 
-        // 2. Platonus (Dropdown or Profile)
-        const platonusName = document.querySelector('.dropdown-user .fw-semibold') || 
-                             document.querySelector('.user-info .name');
+        const platonusName = document.querySelector('.dropdown-user .fw-semibold') ||
+            document.querySelector('.user-info .name');
         if (platonusName) return platonusName.innerText.trim();
 
-        // 3. Univer / Generic
         const univerName = document.querySelector('.username') || document.querySelector('#username_logged_in');
         if (univerName) return univerName.innerText.trim();
-
-    } catch (e) {}
+    } catch (e) { }
     return "Аноним";
 }
 
 // ============================================================================
-// 2. UI HELPERS
+// 3. UI HELPERS
 // ============================================================================
 let statusIndicator = null;
 let solutionPanel = null;
@@ -49,12 +123,15 @@ let solutionPanel = null;
 function showStatus(msg, color = '#333') {
     if (!statusIndicator) {
         statusIndicator = document.createElement('div');
+        statusIndicator.className = 'ai-status-indicator';
         statusIndicator.style.cssText = `
             position: fixed; bottom: 10px; right: 10px;
-            font-family: sans-serif; font-size: 12px; font-weight: bold;
+            font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 500;
             color: #fff; background: #333;
-            padding: 8px 12px; border-radius: 6px;
-            pointer-events: none; z-index: 2147483647; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            padding: 8px 14px; border-radius: 6px;
+            pointer-events: none; z-index: 2147483647; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0.9;
         `;
         document.body.appendChild(statusIndicator);
     }
@@ -66,6 +143,7 @@ function showStatus(msg, color = '#333') {
 function showSolutionPanel(lines) {
     if (solutionPanel) solutionPanel.remove();
     solutionPanel = document.createElement('div');
+    solutionPanel.className = 'ai-solution-panel';
     solutionPanel.style.cssText = `
         position: fixed; top: 80px; right: 20px; width: 220px;
         background: rgba(255, 255, 255, 0.95); border: 2px solid #2e7d32;
@@ -73,7 +151,7 @@ function showSolutionPanel(lines) {
         font-family: sans-serif; font-size: 13px; color: #333;
         box-shadow: 0 5px 20px rgba(0,0,0,0.2);
     `;
-    
+
     const header = document.createElement('div');
     header.style.cssText = "display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #eee; padding-bottom:5px;";
     header.innerHTML = `<b>AI Ответ:</b><span style="cursor:pointer; font-weight:bold;">×</span>`;
@@ -98,14 +176,34 @@ function unlockSite() {
     style.id = 'ai-unlock-style';
     style.innerHTML = ' * { -webkit-user-select: text !important; -moz-user-select: text !important; user-select: text !important; pointer-events: auto !important; } ';
     if (!document.getElementById('ai-unlock-style')) document.head.appendChild(style);
-    
+
     ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup'].forEach(evt => {
         window.addEventListener(evt, (e) => { e.stopPropagation(); }, true);
     });
 }
 
 // ============================================================================
-// 3. IMAGE PROCESSING
+// 4. DOM CLEANUP
+// ============================================================================
+function cleanupAIElements() {
+    document.querySelectorAll('.ai-stealth-badge, .ai-marker, .ai-solution-panel, .ai-status-indicator, .ai-stealth-notify').forEach(el => el.remove());
+}
+
+// Cleanup on navigation (SPA support)
+window.addEventListener('beforeunload', cleanupAIElements);
+
+// MutationObserver for SPA navigation detection
+let lastUrl = location.href;
+const urlObserver = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        cleanupAIElements();
+    }
+});
+urlObserver.observe(document.body, { childList: true, subtree: true });
+
+// ============================================================================
+// 5. IMAGE PROCESSING
 // ============================================================================
 async function processImageSource(url) {
     if (!url) return null;
@@ -114,11 +212,11 @@ async function processImageSource(url) {
             const comma = url.indexOf(',');
             return { inline_data: { mime_type: 'image/jpeg', data: url.substring(comma + 1) } };
         }
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error('Fetch error');
         const blob = await response.blob();
-        
+
         let validMime = blob.type;
         if (!validMime || validMime === 'application/octet-stream') {
             validMime = 'image/jpeg';
@@ -159,11 +257,11 @@ async function getAnnotatedMap(bgImg, dropzones) {
             const x = (zRect.left - bgRect.left + zRect.width / 2) * scaleX;
             const y = (zRect.top - bgRect.top + zRect.height / 2) * scaleY;
 
-            ctx.fillStyle = "#d32f2f"; 
+            ctx.fillStyle = "#d32f2f";
             ctx.beginPath();
             ctx.arc(x, y, 40, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "white"; 
+            ctx.fillStyle = "white";
             ctx.fillText(idx + 1, x, y);
         });
 
@@ -175,7 +273,7 @@ async function getAnnotatedMap(bgImg, dropzones) {
 }
 
 // ============================================================================
-// 4. PARSERS
+// 6. PARSERS
 // ============================================================================
 function extractQuestions() {
     const questions = [];
@@ -190,11 +288,11 @@ function extractQuestions() {
             const bgImg = el.querySelector('.dropbackground');
             const dropzones = Array.from(el.querySelectorAll('.dropzone'));
             const answers = [];
-            
+
             // Drag & Drop
             if (bgImg && dropzones.length > 0) {
-                 const seen = new Set();
-                 el.querySelectorAll('.draghome:not(.dragplaceholder)').forEach(d => {
+                const seen = new Set();
+                el.querySelectorAll('.draghome:not(.dragplaceholder)').forEach(d => {
                     let imgSrc = d.tagName === 'IMG' ? d.src : d.querySelector('img')?.src;
                     let text = d.innerText.trim();
                     const contentKey = text + (imgSrc || "");
@@ -218,7 +316,7 @@ function extractQuestions() {
                     answers: answers,
                     domElement: el
                 });
-            } 
+            }
             // Regular Choice
             else {
                 const options = el.querySelectorAll('.answer div, .answer li, table.answer tr');
@@ -226,16 +324,16 @@ function extractQuestions() {
                     const label = opt.querySelector('label');
                     const input = opt.querySelector('input[type="radio"], input[type="checkbox"]');
                     if (input || label) {
-                         const txt = opt.innerText.trim();
-                         const img = opt.querySelector('img')?.src;
-                         const targetEl = input || label || opt;
-                         answers.push({
-                             id: String.fromCharCode(65 + idx),
-                             text: txt,
-                             imgSrc: img,
-                             element: targetEl,
-                             textElement: opt
-                         });
+                        const txt = opt.innerText.trim();
+                        const img = opt.querySelector('img')?.src;
+                        const targetEl = input || label || opt;
+                        answers.push({
+                            id: String.fromCharCode(65 + idx),
+                            text: txt,
+                            imgSrc: img,
+                            element: targetEl,
+                            textElement: opt
+                        });
                     }
                 });
 
@@ -247,7 +345,7 @@ function extractQuestions() {
                         text: textEl ? textEl.innerText.trim() : "Question",
                         images: [],
                         answers: answers,
-                        isMultiSelect: el.classList.contains('multichoice'), 
+                        isMultiSelect: el.classList.contains('multichoice'),
                         domElement: el
                     });
                 }
@@ -262,14 +360,14 @@ function extractQuestions() {
         const text = platonusWrapper.innerText.trim();
         const qImages = [];
         platonusWrapper.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
-        
+
         const answers = [];
         document.querySelectorAll('.table-question tbody tr, .answer-variant').forEach((row, idx) => {
             const letterId = String.fromCharCode(65 + idx);
             const input = row.querySelector('input');
             const cells = row.querySelectorAll('td');
             const textContainer = cells.length > 1 ? cells[1] : row.querySelector('label');
-            
+
             if (input && textContainer) {
                 answers.push({
                     id: letterId,
@@ -302,7 +400,7 @@ function extractQuestions() {
             const qImages = [];
             textElem?.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
             const answerTable = table.nextElementSibling;
-            
+
             if (answerTable && answerTable.tagName === 'TABLE') {
                 const answers = [];
                 answerTable.querySelectorAll('tr').forEach(row => {
@@ -339,8 +437,27 @@ function extractQuestions() {
 }
 
 // ============================================================================
-// 5. API CLIENT (Returns result + model name)
+// 7. API CLIENT WITH RETRY & EXPONENTIAL BACKOFF
 // ============================================================================
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function askGeminiWithRetry(q, apiKeys, attempt = 1) {
+    try {
+        return await askGemini(q, apiKeys);
+    } catch (error) {
+        if (attempt < RETRY_CONFIG.maxAttempts) {
+            const delay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
+            console.log(`⏳ Retry attempt ${attempt + 1} in ${delay}ms...`);
+            showStatus(`Повтор ${attempt + 1}...`, 'orange');
+            await sleep(delay);
+            return askGeminiWithRetry(q, apiKeys, attempt + 1);
+        }
+        throw error;
+    }
+}
+
 async function askGemini(q, apiKeys) {
     const parts = [];
     let imgCount = 0;
@@ -358,7 +475,7 @@ async function askGemini(q, apiKeys) {
             }
             itemsText += line + "\n";
         }
-        
+
         parts.push({
             text: `Task: Drag & Drop.\n
             The image has red numbered ZONES (1, 2, 3...).\n
@@ -396,39 +513,64 @@ async function askGemini(q, apiKeys) {
         generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
     };
 
+    let lastError = null;
+    let rateLimitHit = false;
+
     for (const model of MODEL_HIERARCHY) {
         for (let i = 0; i < apiKeys.length; i++) {
             const keyIndex = (currentKeyIndex + i) % apiKeys.length;
             try {
                 console.log(`📡 Trying ${model}...`);
                 const res = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKeys[keyIndex]}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
                 });
 
-                if (res.status === 429 || res.status === 503) continue;
-                if (!res.ok) throw new Error(await res.text());
+                if (res.status === 429 || res.status === 503) {
+                    rateLimitHit = true;
+                    console.warn(`⚠️ Rate limit/overload on ${model}, trying next...`);
+                    continue;
+                }
+
+                if (!res.ok) {
+                    lastError = await res.text();
+                    throw new Error(lastError);
+                }
 
                 const data = await res.json();
                 currentKeyIndex = keyIndex;
                 const resultText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                 const json = JSON.parse(resultText);
                 console.log("✅ Success:", json);
-                
-                // RETURN DATA + MODEL NAME FOR STATS
+
                 return { result: json, model: model };
 
-            } catch (e) { console.error("API Error:", e); }
+            } catch (e) {
+                lastError = e;
+                console.error("API Error:", e);
+            }
         }
     }
-    return null;
+
+    // Log rate limit if all failed due to it
+    if (rateLimitHit) {
+        chrome.runtime.sendMessage({
+            action: 'log_event',
+            type: 'rate_limit',
+            model: 'all',
+            meta: { keys_tried: apiKeys.length }
+        });
+        showStealthNotify('Лимит запросов - подождите', 'warning', 4000);
+    }
+
+    throw new Error(lastError?.message || 'All models failed');
 }
 
 // ============================================================================
-// 6. VISUALIZATION & LOGIC
+// 8. VISUALIZATION & LOGIC
 // ============================================================================
 
-// Floating Badge (Moodle)
 function createStealthBadge(targetElement, text, color) {
     if (!targetElement) return;
     const rect = targetElement.getBoundingClientRect();
@@ -453,7 +595,6 @@ function createStealthBadge(targetElement, text, color) {
     document.body.appendChild(badge);
 }
 
-// Inline Marker (Univer/Platonus)
 function injectInlineMarker(targetElement, text) {
     if (!targetElement) return;
     if (targetElement.innerHTML.includes('ai-marker')) return;
@@ -466,7 +607,7 @@ function injectInlineMarker(targetElement, text) {
 
 async function processQuestion(q, apiKeys) {
     if (q.domElement) q.domElement.style.opacity = '0.6';
-    showStatus("Thinking...");
+    showStatus("Думаю...");
 
     document.querySelectorAll('.ai-stealth-badge').forEach(el => el.remove());
     document.querySelectorAll('.ai-marker').forEach(el => el.remove());
@@ -477,8 +618,8 @@ async function processQuestion(q, apiKeys) {
     const doMark = settings.cfgMarker !== false;
 
     try {
-        const responseData = await askGemini(q, apiKeys);
-        
+        const responseData = await askGeminiWithRetry(q, apiKeys);
+
         if (!responseData) throw new Error("No response");
         const { result, model } = responseData;
 
@@ -493,11 +634,11 @@ async function processQuestion(q, apiKeys) {
             action: 'log_event',
             type: 'solve_success',
             model: model,
-            meta: { 
+            meta: {
                 student: getStudentName(),
                 platform: q.platform,
-                question: q.text.substring(0, 150), // Отправляем вопрос
-                answer_ai: answerLog, // Отправляем ответ
+                question: q.text.substring(0, 150),
+                answer_ai: answerLog,
                 has_images: (q.images?.length > 0 || q.type === 'moodle_dd')
             }
         });
@@ -517,11 +658,12 @@ async function processQuestion(q, apiKeys) {
                         solutionLines.push(`<b>Зона ${pair.zone}</b> ➜ <b>${item.id}</b> <span style="color:#888">${desc}</span>`);
                     }
                 });
-                showStatus("Check Visuals!", "#2e7d32");
+                showStatus("Проверь!", "#2e7d32");
                 showSolutionPanel(solutionLines);
             }
-        } 
-        
+            showStealthNotify('Drag & Drop решён', 'success');
+        }
+
         // --- CHOICE ---
         else if (result && result.correct) {
             let found = false;
@@ -541,38 +683,67 @@ async function processQuestion(q, apiKeys) {
                     }
                 }
             });
-            showStatus(found ? "Solved" : "Check info", found ? "#2e7d32" : "orange");
+            showStatus(found ? "Готово" : "Проверь", found ? "#2e7d32" : "orange");
+            if (found) showStealthNotify('Ответ найден', 'success');
         }
     } catch (e) {
         if (q.domElement) q.domElement.style.opacity = '1';
         console.error(e);
-        showStatus("Error", "red");
+        showStatus("Ошибка", "red");
+        showStealthNotify('Ошибка: ' + (e.message || 'неизвестная'), 'error');
     }
 }
 
 async function start() {
+    // Check if enabled
+    if (!await checkEnabled()) {
+        console.log('🔴 AI Solver is disabled');
+        return;
+    }
+
     const storage = await chrome.storage.sync.get(['geminiApiKeys']);
     const keys = storage.geminiApiKeys || [];
-    if (!keys.length) return showStatus("No Keys", "red");
-    
+    if (!keys.length) {
+        showStealthNotify('API ключи не настроены', 'warning');
+        return showStatus("Нет ключей", "red");
+    }
+
     const qs = extractQuestions();
-    if (!qs.length) return showStatus("No Qs", "orange");
+    if (!qs.length) {
+        showStealthNotify('Вопросы не найдены', 'warning');
+        return showStatus("Нет вопросов", "orange");
+    }
 
     for (const q of qs) await processQuestion(q, keys);
+
+    if (qs.length > 1) {
+        showStealthNotify(`Решено ${qs.length} вопросов`, 'success');
+    }
     hideStatus();
 }
 
-function init() {
+async function init() {
+    // Check if enabled before doing anything
+    if (!await checkEnabled()) {
+        console.log('🔴 AI Solver is disabled, skipping init');
+        return;
+    }
+
     unlockSite();
+
     window.addEventListener('keydown', (e) => {
-        if (e.altKey && e.code === HOTKEY_CODE) { e.preventDefault(); start(); }
+        if (e.altKey && e.code === HOTKEY_CODE) {
+            e.preventDefault();
+            start();
+        }
     }, true);
-    
+
     window.addEventListener('click', async (e) => {
         if (e.altKey) {
             const el = e.target.closest('.que, .question-wrapper, table.question');
             if (el) {
-                e.preventDefault(); e.stopPropagation();
+                e.preventDefault();
+                e.stopPropagation();
                 const storage = await chrome.storage.sync.get(['geminiApiKeys']);
                 const qs = extractQuestions();
                 const q = qs.find(x => x.domElement === el) || qs[0];
@@ -580,6 +751,16 @@ function init() {
             }
         }
     }, true);
+
+    // Listen for enable/disable changes
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.isEnabled) {
+            isExtensionEnabled = changes.isEnabled.newValue !== false;
+            if (!isExtensionEnabled) {
+                cleanupAIElements();
+            }
+        }
+    });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

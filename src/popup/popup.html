@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
-  <!-- Иконки FontAwesome (можно через CDN или локально) -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
-  <!-- ГЛАВНЫЙ ЭКРАН (МАСКИРОВКА) -->
+  <!-- UPDATE NOTIFICATION BANNER -->
+  <div id="update-banner" class="update-banner hidden">
+    <i class="fas fa-arrow-up"></i>
+    <span id="update-text">Обновление доступно</span>
+    <a id="update-link" href="#" target="_blank">Скачать</a>
+  </div>
+
+  <!-- MAIN VIEW -->
   <div id="main-view">
     <div class="header">
       <div class="logo">
@@ -30,11 +36,19 @@
         <span class="label">ads blocked</span>
       </div>
 
-      <!-- ГЛАВНАЯ КНОПКА (ВКЛ/ВЫКЛ РАСШИРЕНИЯ) -->
+      <!-- MASTER TOGGLE -->
       <div class="toggle-wrapper">
         <div class="toggle-circle" id="master-switch">
           <i class="fas fa-check"></i>
         </div>
+      </div>
+    </div>
+
+    <!-- RATE LIMIT INDICATOR -->
+    <div class="rate-limit-bar" id="rate-limit-section">
+      <div class="rate-info">
+        <i class="fas fa-bolt"></i>
+        <span id="rate-limit-text">Лимитов: 0</span>
       </div>
     </div>
 
@@ -50,27 +64,27 @@
     </div>
     
     <div class="footer">
-      AdGuard for Windows
+      <span id="version-text">v3.0.0</span>
       <div class="os-icons">
         <i class="fab fa-windows"></i>
       </div>
     </div>
   </div>
 
-  <!-- ЭКРАН НАСТРОЕК (СКРЫТЫЙ) -->
+  <!-- SETTINGS VIEW -->
   <div id="settings-view" style="display: none;">
     <div class="header">
       <div class="logo" id="back-to-main" style="cursor: pointer;">
-        <i class="fas fa-arrow-left"></i> Settings
+        <i class="fas fa-arrow-left"></i> Настройки
       </div>
     </div>
     
     <div class="settings-content">
-      <!-- 1. ПОВЕДЕНИЕ -->
-      <div class="section-title">BEHAVIOR</div>
+      <!-- BEHAVIOR -->
+      <div class="section-title">ПОВЕДЕНИЕ</div>
       
       <div class="setting-row">
-        <span><i class="fas fa-mouse-pointer"></i> Auto-Click Answer</span>
+        <span><i class="fas fa-mouse-pointer"></i> Автоклик ответа</span>
         <label class="toggle-switch">
           <input type="checkbox" id="cfg-autoclick">
           <span class="slider"></span>
@@ -78,30 +92,64 @@
       </div>
 
       <div class="setting-row">
-        <span><i class="fas fa-eye"></i> Show Visual Marker</span>
+        <span><i class="fas fa-eye"></i> Показывать маркер</span>
         <label class="toggle-switch">
           <input type="checkbox" id="cfg-marker">
           <span class="slider"></span>
         </label>
       </div>
 
-      <!-- 2. КЛЮЧИ -->
-      <div class="section-title" style="margin-top: 15px;">API KEYS (GEMINI)</div>
-      <textarea id="apiKeysInput" placeholder="Paste keys here (one per line)..."></textarea>
+      <!-- LANGUAGE -->
+      <div class="section-title" style="margin-top: 15px;">ЯЗЫК</div>
+      <div class="setting-row">
+        <span><i class="fas fa-globe"></i> Язык интерфейса</span>
+        <select id="cfg-language" class="select-input">
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+
+      <!-- API KEYS -->
+      <div class="section-title" style="margin-top: 15px;">API КЛЮЧИ (GEMINI)</div>
+      <textarea id="apiKeysInput" placeholder="Вставьте ключи сюда (по одному на строку)..."></textarea>
       
       <div class="key-meter">
         <div class="progress-bg"><div class="progress-fill" id="keyProgress"></div></div>
-        <div class="key-count" id="keyCountText">0 keys loaded</div>
+        <div class="key-count" id="keyCountText">0 ключей</div>
       </div>
 
       <div class="btn-group">
-        <button id="save-keys" class="adg-btn primary">Save</button>
-        <button id="check-keys" class="adg-btn secondary">Check Keys</button>
+        <button id="save-keys" class="adg-btn primary">Сохранить</button>
+        <button id="check-keys" class="adg-btn secondary">Проверить</button>
       </div>
 
-      <!-- РЕЗУЛЬТАТЫ ПРОВЕРКИ -->
+      <!-- CHECK RESULTS -->
       <div id="check-results"></div>
       <div id="status-msg"></div>
+
+      <!-- EXPORT/IMPORT -->
+      <div class="section-title" style="margin-top: 20px;">РЕЗЕРВНАЯ КОПИЯ</div>
+      <div class="btn-group">
+        <button id="export-settings" class="adg-btn secondary">
+          <i class="fas fa-download"></i> Экспорт
+        </button>
+        <button id="import-settings" class="adg-btn secondary">
+          <i class="fas fa-upload"></i> Импорт
+        </button>
+      </div>
+      <input type="file" id="import-file" accept=".json" style="display: none;">
+
+      <!-- UPDATE CHECK -->
+      <div class="section-title" style="margin-top: 20px;">ОБНОВЛЕНИЯ</div>
+      <div class="update-section">
+        <div class="update-status" id="update-status">
+          <i class="fas fa-check-circle"></i>
+          <span id="update-status-text">Версия актуальна</span>
+        </div>
+        <button id="check-update" class="adg-btn secondary sm">
+          <i class="fas fa-sync-alt"></i> Проверить
+        </button>
+      </div>
     </div>
   </div>
 
