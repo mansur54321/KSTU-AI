@@ -2,9 +2,18 @@
 // AI SOLVER v5.0 (Stealth + Retry + i18n)
 // ============================================================================
 
-const MODEL_HIERARCHY = [
+// Free-tier model hierarchy (default)
+const MODEL_HIERARCHY_FREE = [
     'gemini-3-flash-preview',
-    'gemini-2.5-flash'
+    'gemini-3.1-flash-lite'
+];
+
+// Paid (Pro) model hierarchy — enabled via settings toggle
+const MODEL_HIERARCHY_PRO = [
+    'gemini-3.1-pro',
+    'gemini-3-pro',
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite'
 ];
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
@@ -443,22 +452,22 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function askGeminiWithRetry(q, apiKeys, attempt = 1) {
+async function askGeminiWithRetry(q, apiKeys, models, attempt = 1) {
     try {
-        return await askGemini(q, apiKeys);
+        return await askGemini(q, apiKeys, models);
     } catch (error) {
         if (attempt < RETRY_CONFIG.maxAttempts) {
             const delay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
             console.log(`⏳ Retry attempt ${attempt + 1} in ${delay}ms...`);
             showStatus(`Повтор ${attempt + 1}...`, 'orange');
             await sleep(delay);
-            return askGeminiWithRetry(q, apiKeys, attempt + 1);
+            return askGeminiWithRetry(q, apiKeys, models, attempt + 1);
         }
         throw error;
     }
 }
 
-async function askGemini(q, apiKeys) {
+async function askGemini(q, apiKeys, models) {
     const parts = [];
     let imgCount = 0;
 
@@ -516,7 +525,7 @@ async function askGemini(q, apiKeys) {
     let lastError = null;
     let rateLimitHit = false;
 
-    for (const model of MODEL_HIERARCHY) {
+    for (const model of models) {
         for (let i = 0; i < apiKeys.length; i++) {
             const keyIndex = (currentKeyIndex + i) % apiKeys.length;
             try {
@@ -605,7 +614,7 @@ function injectInlineMarker(targetElement, text) {
     targetElement.appendChild(marker);
 }
 
-async function processQuestion(q, apiKeys) {
+async function processQuestion(q, apiKeys, models) {
     if (q.domElement) q.domElement.style.opacity = '0.6';
     showStatus("Думаю...");
 
@@ -618,7 +627,7 @@ async function processQuestion(q, apiKeys) {
     const doMark = settings.cfgMarker !== false;
 
     try {
-        const responseData = await askGeminiWithRetry(q, apiKeys);
+        const responseData = await askGeminiWithRetry(q, apiKeys, models);
 
         if (!responseData) throw new Error("No response");
         const { result, model } = responseData;
@@ -701,8 +710,9 @@ async function start() {
         return;
     }
 
-    const storage = await chrome.storage.sync.get(['geminiApiKeys']);
+    const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
     const keys = storage.geminiApiKeys || [];
+    const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
     if (!keys.length) {
         showStealthNotify('API ключи не настроены', 'warning');
         return showStatus("Нет ключей", "red");
@@ -714,7 +724,7 @@ async function start() {
         return showStatus("Нет вопросов", "orange");
     }
 
-    for (const q of qs) await processQuestion(q, keys);
+    for (const q of qs) await processQuestion(q, keys, models);
 
     if (qs.length > 1) {
         showStealthNotify(`Решено ${qs.length} вопросов`, 'success');
@@ -744,10 +754,11 @@ async function init() {
             if (el) {
                 e.preventDefault();
                 e.stopPropagation();
-                const storage = await chrome.storage.sync.get(['geminiApiKeys']);
+                const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
+                const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
                 const qs = extractQuestions();
                 const q = qs.find(x => x.domElement === el) || qs[0];
-                if (q && storage.geminiApiKeys) processQuestion(q, storage.geminiApiKeys);
+                if (q && storage.geminiApiKeys) processQuestion(q, storage.geminiApiKeys, models);
             }
         }
     }, true);

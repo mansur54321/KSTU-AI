@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cfgAutoClick = document.getElementById('cfg-autoclick');
     const cfgMarker = document.getElementById('cfg-marker');
     const cfgLanguage = document.getElementById('cfg-language');
+    const cfgProModels = document.getElementById('cfg-pro-models');
 
     // Export/Import
     const exportBtn = document.getElementById('export-settings');
@@ -46,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Data Loading ---
     const data = await chrome.storage.sync.get([
         'isEnabled', 'solvedCount', 'geminiApiKeys',
-        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits'
+        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels'
     ]);
 
     let isEnabled = data.isEnabled !== false;
@@ -56,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let marker = data.cfgMarker !== false;
     let language = data.language || 'ru';
     let rateLimitHits = data.rateLimitHits || 0;
+    let proModels = data.cfgProModels || false;
 
     // --- Init UI ---
     updateMasterUI(isEnabled);
@@ -65,6 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgAutoClick.checked = autoClick;
     cfgMarker.checked = marker;
     cfgLanguage.value = language;
+    cfgProModels.checked = proModels;
     versionText.innerText = 'v' + chrome.runtime.getManifest().version;
     rateLimitText.innerText = `Лимитов: ${rateLimitHits}`;
 
@@ -116,6 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgAutoClick.addEventListener('change', (e) => chrome.storage.sync.set({ cfgAutoClick: e.target.checked }));
     cfgMarker.addEventListener('change', (e) => chrome.storage.sync.set({ cfgMarker: e.target.checked }));
     cfgLanguage.addEventListener('change', (e) => chrome.storage.sync.set({ language: e.target.value }));
+    cfgProModels.addEventListener('change', (e) => chrome.storage.sync.set({ cfgProModels: e.target.checked }));
 
     // 4. Save Keys
     keysInput.addEventListener('input', () => {
@@ -220,6 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (importData.cfgAutoClick !== undefined) cfgAutoClick.checked = importData.cfgAutoClick;
             if (importData.cfgMarker !== undefined) cfgMarker.checked = importData.cfgMarker;
             if (importData.language) cfgLanguage.value = importData.language;
+            if (importData.cfgProModels !== undefined) cfgProModels.checked = importData.cfgProModels;
 
             statusMsg.innerText = 'Импортировано!';
             statusMsg.style.color = '#67b279';
