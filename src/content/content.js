@@ -5,15 +5,15 @@
 // Free-tier model hierarchy (default)
 const MODEL_HIERARCHY_FREE = [
     'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite'
+    'gemini-3.1-flash-lite-preview'
 ];
 
 // Paid (Pro) model hierarchy — enabled via settings toggle
 const MODEL_HIERARCHY_PRO = [
-    'gemini-3.1-pro',
-    'gemini-3-pro',
+    'gemini-3.1-pro-preview',
+    'gemini-3-pro-preview',
     'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite'
+    'gemini-3.1-flash-lite-preview'
 ];
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
