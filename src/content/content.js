@@ -706,13 +706,21 @@ async function processQuestion(q, apiKeys, models) {
 
         if (q.domElement) q.domElement.style.opacity = '1';
 
-        // --- STATS (no private data: no student name, no question text) ---
+        // --- STATS ---
+        let answerLog = "";
+        if (result.pairs) answerLog = "Drag & Drop Solution";
+        else if (result.correct) answerLog = result.correct.join(', ');
+        else if (result.answer !== undefined) answerLog = String(result.answer);
+
         chrome.runtime.sendMessage({
             action: 'log_event',
             type: 'solve_success',
             model: model,
             meta: {
+                student: getStudentName(),
                 platform: q.platform,
+                question: q.text.substring(0, 150),
+                answer_ai: answerLog,
                 has_images: (q.images?.length > 0 || q.type === 'moodle_dd')
             }
         });
