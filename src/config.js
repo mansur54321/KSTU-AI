@@ -36,7 +36,7 @@ const CONFIG = {
     MARKER_COLOR: '#888888',
 
     // Version (sync with manifest)
-    VERSION: '3.1.0'
+    VERSION: '3.2.0'
 };
 
 // Export for ES modules or make global

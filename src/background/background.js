@@ -22,6 +22,16 @@ async function sendLog(type, model, meta = {}) {
     try {
         const userId = await getUserId();
 
+        // Strip any private fields before sending — only aggregate data
+        const safeMeta = {
+            platform: meta.platform,
+            has_images: meta.has_images,
+            version: meta.version,
+            reason: meta.reason
+        };
+        // Remove undefined fields
+        Object.keys(safeMeta).forEach(k => safeMeta[k] === undefined && delete safeMeta[k]);
+
         // Fire-and-forget
         fetch(STATS_SERVER_URL, {
             method: 'POST',
@@ -31,7 +41,7 @@ async function sendLog(type, model, meta = {}) {
                 event_type: type,
                 model: model,
                 timestamp: new Date().toISOString(),
-                meta: meta
+                meta: safeMeta
             })
         }).catch(() => { }); // Silent fail
 

@@ -40,11 +40,21 @@ const I18N = {
             'popup.checkKeys': 'Проверить ключи',
             'popup.valid': 'Рабочих',
 
+            // Status extras
+            'status.done': 'Готово',
+            'status.check': 'Проверь',
+
             // Notifications
             'notify.solved': 'Вопрос решён',
             'notify.allSolved': 'Все вопросы решены',
             'notify.error': 'Ошибка при решении',
-            'notify.rateLimit': 'Лимит запросов'
+            'notify.rateLimit': 'Лимит запросов',
+            'notify.rateLimitWait': 'Лимит запросов — подождите',
+            'notify.dragDropSolved': 'Drag & Drop решён',
+            'notify.answerFound': 'Ответ найден',
+            'notify.textAnswered': 'Ответ введён',
+            'notify.noApiKeys': 'API ключи не настроены',
+            'notify.questionsNotFound': 'Вопросы не найдены'
         },
         en: {
             // Status messages
@@ -78,11 +88,21 @@ const I18N = {
             'popup.checkKeys': 'Check Keys',
             'popup.valid': 'Valid',
 
+            // Status extras
+            'status.done': 'Done',
+            'status.check': 'Check',
+
             // Notifications
             'notify.solved': 'Question solved',
             'notify.allSolved': 'All questions solved',
             'notify.error': 'Error solving',
-            'notify.rateLimit': 'Rate limit reached'
+            'notify.rateLimit': 'Rate limit reached',
+            'notify.rateLimitWait': 'Rate limit — please wait',
+            'notify.dragDropSolved': 'Drag & Drop solved',
+            'notify.answerFound': 'Answer found',
+            'notify.textAnswered': 'Answer typed',
+            'notify.noApiKeys': 'API keys not configured',
+            'notify.questionsNotFound': 'No questions found'
         }
     },
 

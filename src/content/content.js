@@ -1,5 +1,5 @@
 // ============================================================================
-// AI SOLVER v5.0 (Stealth + Retry + i18n)
+// AI SOLVER v5.2 (Stealth + Retry + i18n + Fill-in + Reason Tooltips)
 // ============================================================================
 
 // Free-tier model hierarchy (default)
@@ -30,7 +30,7 @@ const RETRY_CONFIG = {
 let currentKeyIndex = 0;
 let isExtensionEnabled = true;
 
-console.log(`%c🚀 AI Solver v5.1: STEALTH MODE`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
+console.log(`%c🚀 AI Solver v5.2: STEALTH MODE`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
 
 // ============================================================================
 // 0. INITIALIZATION CHECK
@@ -294,6 +294,24 @@ function extractQuestions() {
             if (el.classList.contains('description')) return;
 
             const textEl = el.querySelector('.qtext');
+
+            // Short Answer / Essay (fill-in text)
+            const fillInput = el.querySelector('.shortanswer input[type="text"]') ||
+                              el.querySelector('.essay textarea') ||
+                              el.querySelector('.shortanswer textarea');
+            if (textEl && fillInput) {
+                questions.push({
+                    type: 'text_input',
+                    platform: 'moodle',
+                    number: i + 1,
+                    text: textEl.innerText.trim(),
+                    images: Array.from(el.querySelectorAll('.qtext img')).map(img => img.src).filter(Boolean),
+                    inputElement: fillInput,
+                    domElement: el
+                });
+                return;
+            }
+
             const bgImg = el.querySelector('.dropbackground');
             const dropzones = Array.from(el.querySelectorAll('.dropzone'));
             const answers = [];
@@ -452,6 +470,28 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Stealth typing: simulates human input to bypass keystroke detection
+async function typeAnswer(el, text) {
+    el.focus();
+    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    // Clear without triggering React/Vue synthetic events
+    nativeSetter.call(el, '');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(80 + Math.random() * 120);
+
+    for (const char of text) {
+        nativeSetter.call(el, el.value + char);
+        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: char }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: char }));
+        await sleep(30 + Math.random() * 80); // 30–110ms per char, human-like
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(50);
+    el.blur();
+}
+
 async function askGeminiWithRetry(q, apiKeys, models, attempt = 1) {
     try {
         return await askGemini(q, apiKeys, models);
@@ -459,7 +499,7 @@ async function askGeminiWithRetry(q, apiKeys, models, attempt = 1) {
         if (attempt < RETRY_CONFIG.maxAttempts) {
             const delay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
             console.log(`⏳ Retry attempt ${attempt + 1} in ${delay}ms...`);
-            showStatus(`Повтор ${attempt + 1}...`, 'orange');
+            showStatus(`${I18N.t('status.retrying')} ${attempt + 1}`, 'orange');
             await sleep(delay);
             return askGeminiWithRetry(q, apiKeys, models, attempt + 1);
         }
@@ -491,6 +531,16 @@ async function askGemini(q, apiKeys, models) {
             Match ITEMS (A, B, C...) to these ZONES.\n
             Items list:\n${itemsText}\n
             Return STRICT JSON: {"pairs": [{"zone": 1, "item": "A"}, {"zone": 2, "item": "B"}]}`
+        });
+    } else if (q.type === 'text_input') {
+        if (q.images?.length) {
+            for (const url of q.images) {
+                const p = await processImageSource(url);
+                if (p) { parts.push(p); imgCount++; }
+            }
+        }
+        parts.push({
+            text: `Question: ${q.text}\nProvide a short, precise answer (1–10 words max).\nReturn JSON: {"answer": "...", "reason": "brief explanation"}`
         });
     } else {
         if (q.images) {
@@ -570,7 +620,7 @@ async function askGemini(q, apiKeys, models) {
             model: 'all',
             meta: { keys_tried: apiKeys.length }
         });
-        showStealthNotify('Лимит запросов - подождите', 'warning', 4000);
+        showStealthNotify(I18N.t('notify.rateLimitWait'), 'warning', 4000);
     }
 
     throw new Error(lastError?.message || 'All models failed');
@@ -580,7 +630,7 @@ async function askGemini(q, apiKeys, models) {
 // 8. VISUALIZATION & LOGIC
 // ============================================================================
 
-function createStealthBadge(targetElement, text, color) {
+function createStealthBadge(targetElement, text, color, reason = null) {
     if (!targetElement) return;
     const rect = targetElement.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0 || rect.top < 0) return;
@@ -592,31 +642,53 @@ function createStealthBadge(targetElement, text, color) {
         position: absolute;
         top: ${window.scrollY + rect.top - 8}px;
         left: ${window.scrollX + rect.left}px;
-        background: rgba(255, 255, 255, 0.85); 
+        background: rgba(255, 255, 255, 0.85);
         color: ${color};
         font-family: sans-serif; font-size: 10px; font-weight: bold;
         padding: 1px 4px; border-radius: 3px;
         border: 1px solid #ccc;
-        z-index: 2147483647; pointer-events: none;
+        z-index: 2147483647;
+        pointer-events: ${reason ? 'auto' : 'none'};
+        cursor: ${reason ? 'help' : 'default'};
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         white-space: nowrap;
     `;
+
+    if (reason) {
+        const tip = document.createElement('div');
+        tip.style.cssText = `
+            display: none; position: absolute;
+            bottom: calc(100% + 5px); left: 0;
+            background: rgba(18, 18, 18, 0.97);
+            color: #e8e8e8; font-size: 11px; font-weight: normal;
+            padding: 7px 11px; border-radius: 6px;
+            max-width: 240px; white-space: normal; line-height: 1.5;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+            pointer-events: none; z-index: 2147483647;
+        `;
+        tip.innerText = reason;
+        badge.appendChild(tip);
+        badge.addEventListener('mouseenter', () => tip.style.display = 'block');
+        badge.addEventListener('mouseleave', () => tip.style.display = 'none');
+    }
+
     document.body.appendChild(badge);
 }
 
-function injectInlineMarker(targetElement, text) {
+function injectInlineMarker(targetElement, text, reason = null) {
     if (!targetElement) return;
     if (targetElement.innerHTML.includes('ai-marker')) return;
     const marker = document.createElement('span');
     marker.className = 'ai-marker';
     marker.innerHTML = ` ${text}`;
-    marker.style.cssText = `color: ${MARKER_COLOR}; font-weight: bold; font-size: 1.4em; margin-left: 5px;`;
+    marker.style.cssText = `color: ${MARKER_COLOR}; font-weight: bold; font-size: 1.4em; margin-left: 5px;${reason ? ' cursor: help;' : ''}`;
+    if (reason) marker.title = reason;
     targetElement.appendChild(marker);
 }
 
 async function processQuestion(q, apiKeys, models) {
     if (q.domElement) q.domElement.style.opacity = '0.6';
-    showStatus("Думаю...");
+    showStatus(I18N.t('status.thinking'));
 
     document.querySelectorAll('.ai-stealth-badge').forEach(el => el.remove());
     document.querySelectorAll('.ai-marker').forEach(el => el.remove());
@@ -634,20 +706,13 @@ async function processQuestion(q, apiKeys, models) {
 
         if (q.domElement) q.domElement.style.opacity = '1';
 
-        // --- STATS ---
-        let answerLog = "";
-        if (result.pairs) answerLog = "Drag & Drop Solution";
-        else if (result.correct) answerLog = result.correct.join(', ');
-
+        // --- STATS (no private data: no student name, no question text) ---
         chrome.runtime.sendMessage({
             action: 'log_event',
             type: 'solve_success',
             model: model,
             meta: {
-                student: getStudentName(),
                 platform: q.platform,
-                question: q.text.substring(0, 150),
-                answer_ai: answerLog,
                 has_images: (q.images?.length > 0 || q.type === 'moodle_dd')
             }
         });
@@ -661,16 +726,30 @@ async function processQuestion(q, apiKeys, models) {
                     const item = q.answers.find(a => a.id === pair.item);
                     const zone = q.dropzones[pair.zone - 1];
                     if (item && zone) {
-                        createStealthBadge(zone, `→ ${item.id}`, '#2e7d32');
+                        createStealthBadge(zone, `→ ${item.id}`, '#2e7d32', result.reason || null);
                         let desc = item.text || (item.imgSrc ? "[Img]" : "???");
                         if (desc.length > 20) desc = desc.substring(0, 17) + "..";
                         solutionLines.push(`<b>Зона ${pair.zone}</b> ➜ <b>${item.id}</b> <span style="color:#888">${desc}</span>`);
                     }
                 });
-                showStatus("Проверь!", "#2e7d32");
+                showStatus(I18N.t('status.check'), '#2e7d32');
                 showSolutionPanel(solutionLines);
             }
-            showStealthNotify('Drag & Drop решён', 'success');
+            showStealthNotify(I18N.t('notify.dragDropSolved'), 'success');
+        }
+
+        // --- TEXT INPUT (shortanswer / essay) ---
+        else if (result && result.answer !== undefined && q.type === 'text_input') {
+            if (doClick) {
+                await typeAnswer(q.inputElement, String(result.answer));
+            }
+            if (doMark && result.reason) {
+                const container = q.inputElement.closest('.formulation, .shortanswer, .essay') ||
+                                  q.inputElement.parentElement;
+                injectInlineMarker(container, '•', result.reason);
+            }
+            showStatus(I18N.t('status.done'), '#2e7d32');
+            showStealthNotify(I18N.t('notify.textAnswered'), 'success');
         }
 
         // --- CHOICE ---
@@ -685,21 +764,21 @@ async function processQuestion(q, apiKeys, models) {
                     }
                     if (doMark) {
                         if (q.platform === 'moodle') {
-                            createStealthBadge(ans.element, `✓`, '#2e7d32');
+                            createStealthBadge(ans.element, '✓', '#2e7d32', result.reason || null);
                         } else {
-                            if (ans.textElement) injectInlineMarker(ans.textElement, '•');
+                            if (ans.textElement) injectInlineMarker(ans.textElement, '•', result.reason || null);
                         }
                     }
                 }
             });
-            showStatus(found ? "Готово" : "Проверь", found ? "#2e7d32" : "orange");
-            if (found) showStealthNotify('Ответ найден', 'success');
+            showStatus(found ? I18N.t('status.done') : I18N.t('status.check'), found ? '#2e7d32' : 'orange');
+            if (found) showStealthNotify(I18N.t('notify.answerFound'), 'success');
         }
     } catch (e) {
         if (q.domElement) q.domElement.style.opacity = '1';
         console.error(e);
-        showStatus("Ошибка", "red");
-        showStealthNotify('Ошибка: ' + (e.message || 'неизвестная'), 'error');
+        showStatus(I18N.t('status.error'), 'red');
+        showStealthNotify(I18N.t('notify.error') + ': ' + (e.message || '?'), 'error');
     }
 }
 
@@ -714,20 +793,24 @@ async function start() {
     const keys = storage.geminiApiKeys || [];
     const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
     if (!keys.length) {
-        showStealthNotify('API ключи не настроены', 'warning');
-        return showStatus("Нет ключей", "red");
+        showStealthNotify(I18N.t('notify.noApiKeys'), 'warning');
+        return showStatus(I18N.t('status.noKeys'), 'red');
     }
 
     const qs = extractQuestions();
     if (!qs.length) {
-        showStealthNotify('Вопросы не найдены', 'warning');
-        return showStatus("Нет вопросов", "orange");
+        showStealthNotify(I18N.t('notify.questionsNotFound'), 'warning');
+        return showStatus(I18N.t('status.noQuestions'), 'orange');
     }
 
-    for (const q of qs) await processQuestion(q, keys, models);
+    for (let i = 0; i < qs.length; i++) {
+        // Show progress only when there are multiple questions on the page (Univer/Moodle)
+        if (qs.length > 1) showStatus(`[${i + 1}/${qs.length}]`);
+        await processQuestion(qs[i], keys, models);
+    }
 
     if (qs.length > 1) {
-        showStealthNotify(`Решено ${qs.length} вопросов`, 'success');
+        showStealthNotify(`${I18N.t('notify.allSolved')}: ${qs.length}`, 'success');
     }
     hideStatus();
 }
@@ -739,6 +822,7 @@ async function init() {
         return;
     }
 
+    await I18N.init(); // Load language preference
     unlockSite();
 
     window.addEventListener('keydown', (e) => {
