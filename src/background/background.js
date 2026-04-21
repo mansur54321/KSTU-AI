@@ -4,7 +4,7 @@ const CONFIG = {
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
     GITHUB_REPO: 'mansur54321/KSTU-AI',
     GITHUB_API: 'https://api.github.com/repos/',
-    STATS_SERVER_URL: 'https://159.223.3.49:3000/api/log',
+    STATS_SERVER_URL: 'https://159.223.3.49:8443/api/log',
     RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',

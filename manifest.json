@@ -17,7 +17,7 @@
     "*://*.enu.kz/*",
     "*://*.amu.kz/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://159.223.3.49:3000/*"
+    "https://159.223.3.49:8443/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
