@@ -93,7 +93,7 @@ function compareVersions(v1, v2) {
 async function askGeminiViaApi(parts, apiKeys, models) {
     const requestBody = {
         contents: [{ parts: parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+        generationConfig: { responseMimeType: "application/json", temperature: 1.0 }
     };
 
     let lastError = null;
