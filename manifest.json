@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "AdGuard Privacy",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Блокировщик рекламы и защиты конфиденциальности",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "activeTab"
   ],
   "host_permissions": [
     "*://*.kstu.kz/*",

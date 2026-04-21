@@ -1,9 +1,15 @@
-const MODEL_HIERARCHY_FREE = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
-const MODEL_HIERARCHY_PRO = ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
 const HOTKEY_CODE = 'KeyS';
 const MARKER_COLOR = '#999999';
 const API_KEY_REGEX = /^AIzaSy[A-Za-z0-9_-]{30,}$/;
 const RETRY_CONFIG = { maxAttempts: 3, baseDelay: 1000, backoffMultiplier: 2 };
+
+function getModels(pro) {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'get_models', pro }, (resp) => {
+            resolve(resp || ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview']);
+        });
+    });
+}
 
 let currentKeyIndex = 0;
 let isExtensionEnabled = true;
@@ -170,8 +176,12 @@ async function getAnnotatedMap(bgImg, dropzones) {
         canvas.width = bgImg.naturalWidth || bgImg.width || 800;
         canvas.height = bgImg.naturalHeight || bgImg.height || 600;
         const ctx = canvas.getContext('2d');
-        bgImg.crossOrigin = "anonymous";
-        ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+        try {
+            bgImg.crossOrigin = "anonymous";
+            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+        } catch (corsError) {
+            return await getScreenshotFallback(bgImg, dropzones);
+        }
         const scaleX = canvas.width / bgImg.offsetWidth;
         const scaleY = canvas.height / bgImg.offsetHeight;
         const bgRect = bgImg.getBoundingClientRect();
@@ -192,7 +202,55 @@ async function getAnnotatedMap(bgImg, dropzones) {
         });
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         return { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } };
-    } catch (e) { return null; }
+    } catch (e) {
+        return await getScreenshotFallback(bgImg, dropzones);
+    }
+}
+
+async function getScreenshotFallback(bgImg, dropzones) {
+    try {
+        const resp = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'screenshot' }, resolve);
+        });
+        if (!resp?.dataUrl) return null;
+        const bgRect = bgImg.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = bgRect.width * dpr;
+        cropCanvas.height = bgRect.height * dpr;
+        const ctx = cropCanvas.getContext('2d');
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = resp.dataUrl;
+        });
+        ctx.drawImage(img,
+            bgRect.left * dpr, bgRect.top * dpr, bgRect.width * dpr, bgRect.height * dpr,
+            0, 0, cropCanvas.width, cropCanvas.height
+        );
+        const scaleX = cropCanvas.width / bgRect.width;
+        const scaleY = cropCanvas.height / bgRect.height;
+        ctx.font = `bold ${40 * dpr}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = 4 * dpr;
+        dropzones.forEach((zone, idx) => {
+            const zRect = zone.getBoundingClientRect();
+            const x = (zRect.left - bgRect.left + zRect.width / 2) * scaleX;
+            const y = (zRect.top - bgRect.top + zRect.height / 2) * scaleY;
+            ctx.fillStyle = "#d32f2f";
+            ctx.beginPath();
+            ctx.arc(x, y, 40 * dpr, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "white";
+            ctx.fillText(idx + 1, x, y);
+        });
+        const dataUrl = cropCanvas.toDataURL('image/jpeg', 0.8);
+        return { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } };
+    } catch (e) {
+        return null;
+    }
 }
 
 function extractQuestions() {
@@ -481,7 +539,7 @@ async function start() {
     const extracted = await autoExtractApiKey();
     if (extracted && !keys.includes(extracted)) keys.push(extracted);
 
-    const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
+    const models = await getModels(storage.cfgProModels);
 
     if (!keys.length) {
         showStealthNotify(I18N.t('notify.noApiKeys'), 'warning');
@@ -519,7 +577,7 @@ async function init() {
             if (el) {
                 e.preventDefault(); e.stopPropagation();
                 const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
-                const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
+                const models = await getModels(storage.cfgProModels);
                 const keys = storage.geminiApiKeys || [];
                 const qs = extractQuestions();
                 const q = qs.find(x => x.domElement === el) || qs[0];

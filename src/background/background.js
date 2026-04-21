@@ -9,7 +9,7 @@ const CONFIG = {
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.3.0'
+    VERSION: '3.4.0'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -194,9 +194,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    if (request.action === 'screenshot') {
+        chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 85 }, (dataUrl) => {
+            sendResponse(dataUrl ? { dataUrl } : { error: 'capture failed' });
+        });
+        return true;
+    }
+
     if (request.action === 'get_models') {
-        const pro = request.pro;
-        sendResponse(pro ? CONFIG.MODELS_PRO : CONFIG.MODELS);
+        sendResponse(request.pro ? CONFIG.MODELS_PRO : CONFIG.MODELS);
     }
 
     return true;
