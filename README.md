@@ -1,4 +1,4 @@
-# AdGuard Privacy (Chrome Extension)
+# Gemini Stealth Solver (Chrome Extension)
 
 <img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/6a22d5dc-df47-4a41-84c9-213664bc94f8" />
 
