@@ -1,22 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "AI Stealth Solver (Universal)",
-  "version": "3.2.0",
-  "description": "Помощник для сдачи тестов в системах Platonus и Univer и Moodle с использованием Gemini AI",
+  "name": "AdGuard Privacy",
+  "version": "3.3.0",
+  "description": "Блокировщик рекламы и защиты конфиденциальности",
   "permissions": [
     "storage",
     "alarms"
   ],
   "host_permissions": [
-    "<all_urls>",
-    "http://159.223.3.49:3000/*"
+    "*://*.kstu.kz/*",
+    "*://*.edu.kz/*",
+    "*://*.platonus.*/*",
+    "*://*.univer.*/*",
+    "*://moodle.*/*",
+    "*://*.kaznu.kz/*",
+    "*://*.enu.kz/*",
+    "*://*.amu.kz/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://159.223.3.49:3000/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"
   },
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "AI Stealth Solver",
+    "default_title": "AdGuard Privacy",
     "default_icon": {
       "16": "assets/icons/icon16.png",
       "48": "assets/icons/icon48.png",
@@ -31,17 +39,14 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
-      ],
-      "include_globs": [
-        "*platonus*",
-        "*univer*",
-        "*edu.kz*",
-        "*moodle.*",
-        "*kstu.kz*",
-        "*localhost*",
-        "*127.0.0.1*",
-        "file://*"
+        "*://*.kstu.kz/*",
+        "*://*.edu.kz/*",
+        "*://*.platonus.*/*",
+        "*://*.univer.*/*",
+        "*://moodle.*/*",
+        "*://*.kaznu.kz/*",
+        "*://*.enu.kz/*",
+        "*://*.amu.kz/*"
       ],
       "js": [
         "src/i18n.js",

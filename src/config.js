@@ -1,45 +1,29 @@
-// ============================================================================
-// CENTRALIZED CONFIGURATION
-// ============================================================================
-
 const CONFIG = {
-    // API Models for free-tier keys (in priority order)
     MODELS: [
         'gemini-3-flash-preview',
         'gemini-3.1-flash-lite-preview'
     ],
-
-    // API Models for paid (Pro) keys (in priority order)
     MODELS_PRO: [
         'gemini-3.1-pro-preview',
         'gemini-3-pro-preview',
         'gemini-3-flash-preview',
         'gemini-3.1-flash-lite-preview'
     ],
-
-    // API Settings
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
-
-    // GitHub Update Checker
     GITHUB_REPO: 'mansur54321/KSTU-AI',
     GITHUB_API: 'https://api.github.com/repos/',
-
-    // Retry Settings
+    STATS_SERVER_URL: 'https://159.223.3.49:3000/api/log',
     RETRY: {
         MAX_ATTEMPTS: 3,
         BASE_DELAY_MS: 1000,
         BACKOFF_MULTIPLIER: 2
     },
-
-    // UI Settings
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
-
-    // Version (sync with manifest)
-    VERSION: '3.2.0'
+    API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
+    VERSION: '3.3.0'
 };
 
-// Export for ES modules or make global
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = CONFIG;
 }

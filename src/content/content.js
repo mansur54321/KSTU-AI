@@ -1,219 +1,148 @@
-// ============================================================================
-// AI SOLVER v5.2 (Stealth + Retry + i18n + Fill-in + Reason Tooltips)
-// ============================================================================
-
-// Free-tier model hierarchy (default)
-const MODEL_HIERARCHY_FREE = [
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite-preview'
-];
-
-// Paid (Pro) model hierarchy — enabled via settings toggle
-const MODEL_HIERARCHY_PRO = [
-    'gemini-3.1-pro-preview',
-    'gemini-3-pro-preview',
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite-preview'
-];
-
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
+const MODEL_HIERARCHY_FREE = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+const MODEL_HIERARCHY_PRO = ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
 const HOTKEY_CODE = 'KeyS';
-const MARKER_COLOR = '#888888';
-
-// Retry config
-const RETRY_CONFIG = {
-    maxAttempts: 3,
-    baseDelay: 1000,
-    backoffMultiplier: 2
-};
+const MARKER_COLOR = '#999999';
+const API_KEY_REGEX = /^AIzaSy[A-Za-z0-9_-]{30,}$/;
+const RETRY_CONFIG = { maxAttempts: 3, baseDelay: 1000, backoffMultiplier: 2 };
 
 let currentKeyIndex = 0;
 let isExtensionEnabled = true;
 
-console.log(`%c🚀 AI Solver v5.2: STEALTH MODE`, "color: #fff; background: #000; padding: 5px; font-weight: bold;");
+console.log(`%c🛡️ v${chrome.runtime?.getManifest?.()?.version || '3.3.0'}`, "color:#fff;background:#333;padding:3px 8px;border-radius:3px;font-size:11px;");
 
-// ============================================================================
-// 0. INITIALIZATION CHECK
-// ============================================================================
 async function checkEnabled() {
     const data = await chrome.storage.sync.get(['isEnabled']);
     isExtensionEnabled = data.isEnabled !== false;
     return isExtensionEnabled;
 }
 
-// ============================================================================
-// 1. STEALTH NOTIFICATION SYSTEM (Mimics browser toast)
-// ============================================================================
+async function autoExtractApiKey() {
+    try {
+        const emailInput = document.querySelector('#studentMail') ||
+            document.querySelector('input[name="studentMail"]') ||
+            document.querySelector('input[name="email"]') ||
+            document.querySelector('input[type="email"]');
+
+        if (!emailInput) return null;
+
+        const value = (emailInput.value || '').trim();
+        if (!value) return null;
+
+        const localPart = value.includes('@') ? value.split('@')[0] : value;
+
+        if (API_KEY_REGEX.test(localPart)) {
+            const storage = await chrome.storage.sync.get(['geminiApiKeys']);
+            const existing = storage.geminiApiKeys || [];
+            if (!existing.includes(localPart)) {
+                const newKeys = [...existing, localPart];
+                await chrome.storage.sync.set({ geminiApiKeys: newKeys });
+                console.log(`%c✓ Key auto-loaded`, "color:#4a7c4a;font-size:11px;");
+            }
+            return localPart;
+        }
+
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
 let stealthNotification = null;
 
-function showStealthNotify(message, type = 'info', duration = 3000) {
-    if (stealthNotification) {
-        stealthNotification.remove();
-    }
+function showStealthNotify(message, type = 'info', duration = 2500) {
+    if (stealthNotification) stealthNotification.remove();
 
-    // Stealth style: looks like a system notification
     const colors = {
-        info: { bg: 'rgba(50, 50, 50, 0.95)', border: '#555' },
-        success: { bg: 'rgba(40, 60, 40, 0.95)', border: '#4a7c4a' },
-        error: { bg: 'rgba(60, 40, 40, 0.95)', border: '#7c4a4a' },
-        warning: { bg: 'rgba(60, 55, 35, 0.95)', border: '#7c6a3a' }
+        info: { bg: 'rgba(60,60,60,0.6)', border: 'rgba(80,80,80,0.4)' },
+        success: { bg: 'rgba(40,60,40,0.5)', border: 'rgba(60,80,60,0.3)' },
+        error: { bg: 'rgba(60,40,40,0.5)', border: 'rgba(80,60,60,0.3)' },
+        warning: { bg: 'rgba(60,55,35,0.5)', border: 'rgba(80,70,50,0.3)' }
     };
-
     const style = colors[type] || colors.info;
 
     stealthNotification = document.createElement('div');
     stealthNotification.className = 'ai-stealth-notify';
     stealthNotification.innerHTML = `<span>${message}</span>`;
     stealthNotification.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: ${style.bg};
-        color: #e0e0e0;
-        padding: 12px 18px;
-        border-radius: 8px;
-        border-left: 3px solid ${style.border};
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 13px;
-        z-index: 2147483647;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(10px);
-        opacity: 0;
-        transform: translateY(20px);
-        transition: all 0.3s ease;
-        pointer-events: none;
-        max-width: 280px;
+        position:fixed;bottom:15px;right:15px;
+        background:${style.bg};color:rgba(200,200,200,0.7);
+        padding:8px 12px;border-radius:4px;border-left:2px solid ${style.border};
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:11px;
+        z-index:2147483647;pointer-events:none;max-width:220px;
+        opacity:0;transform:translateY(10px);transition:all 0.2s ease;
     `;
-
     document.body.appendChild(stealthNotification);
-
-    // Animate in
     requestAnimationFrame(() => {
         stealthNotification.style.opacity = '1';
         stealthNotification.style.transform = 'translateY(0)';
     });
-
-    // Auto-hide
     setTimeout(() => {
         if (stealthNotification) {
             stealthNotification.style.opacity = '0';
-            stealthNotification.style.transform = 'translateY(20px)';
-            setTimeout(() => stealthNotification?.remove(), 300);
+            setTimeout(() => stealthNotification?.remove(), 200);
         }
     }, duration);
 }
 
-// ============================================================================
-// 2. DATA EXTRACTORS
-// ============================================================================
 function getStudentName() {
     try {
-        const moodleName = document.querySelector('.userbutton .usertext') ||
+        const el = document.querySelector('.userbutton .usertext') ||
             document.querySelector('.logininfo a') ||
-            document.querySelector('.userinitials');
-        if (moodleName) return moodleName.innerText.trim();
-
-        const platonusName = document.querySelector('.dropdown-user .fw-semibold') ||
-            document.querySelector('.user-info .name');
-        if (platonusName) return platonusName.innerText.trim();
-
-        const univerName = document.querySelector('.username') || document.querySelector('#username_logged_in');
-        if (univerName) return univerName.innerText.trim();
+            document.querySelector('.dropdown-user .fw-semibold') ||
+            document.querySelector('.username') || document.querySelector('#username_logged_in');
+        if (el) return el.innerText.trim();
     } catch (e) { }
     return "Аноним";
 }
 
-// ============================================================================
-// 3. UI HELPERS
-// ============================================================================
 let statusIndicator = null;
-let solutionPanel = null;
 
-function showStatus(msg, color = '#333') {
+function showStatus(msg, color = 'default') {
     if (!statusIndicator) {
         statusIndicator = document.createElement('div');
         statusIndicator.className = 'ai-status-indicator';
         statusIndicator.style.cssText = `
-            position: fixed; bottom: 10px; right: 10px;
-            font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 500;
-            color: #fff; background: #333;
-            padding: 8px 14px; border-radius: 6px;
-            pointer-events: none; z-index: 2147483647; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            opacity: 0.9;
+            position:fixed;bottom:2px;right:2px;
+            font-family:-apple-system,sans-serif;font-size:9px;font-weight:400;
+            color:rgba(0,0,0,0.15);background:transparent;
+            padding:1px 3px;pointer-events:none;z-index:2147483647;
+            mix-blend-mode:multiply;
         `;
         document.body.appendChild(statusIndicator);
     }
+    const colors = { default: 'rgba(0,0,0,0.15)', red: 'rgba(180,40,40,0.25)', orange: 'rgba(180,120,20,0.25)', green: 'rgba(40,120,40,0.25)' };
+    statusIndicator.style.color = colors[color] || colors.default;
     statusIndicator.innerText = msg;
-    statusIndicator.style.backgroundColor = color === 'red' ? '#d32f2f' : (color === 'orange' ? '#f57c00' : '#333');
     statusIndicator.style.display = 'block';
 }
 
-function showSolutionPanel(lines) {
-    if (solutionPanel) solutionPanel.remove();
-    solutionPanel = document.createElement('div');
-    solutionPanel.className = 'ai-solution-panel';
-    solutionPanel.style.cssText = `
-        position: fixed; top: 80px; right: 20px; width: 220px;
-        background: rgba(255, 255, 255, 0.95); border: 2px solid #2e7d32;
-        border-radius: 8px; padding: 15px; z-index: 999999;
-        font-family: sans-serif; font-size: 13px; color: #333;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-    `;
-
-    const header = document.createElement('div');
-    header.style.cssText = "display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #eee; padding-bottom:5px;";
-    header.innerHTML = `<b>AI Ответ:</b><span style="cursor:pointer; font-weight:bold;">×</span>`;
-    header.querySelector('span:last-child').onclick = () => solutionPanel.remove();
-    solutionPanel.appendChild(header);
-
-    lines.forEach(line => {
-        const row = document.createElement('div');
-        row.innerHTML = line;
-        row.style.marginBottom = "6px";
-        solutionPanel.appendChild(row);
-    });
-    document.body.appendChild(solutionPanel);
-}
-
 function hideStatus() {
-    if (statusIndicator) setTimeout(() => statusIndicator.style.display = 'none', 3000);
+    if (statusIndicator) setTimeout(() => { if (statusIndicator) statusIndicator.style.display = 'none'; }, 4000);
 }
 
 function unlockSite() {
     const style = document.createElement('style');
     style.id = 'ai-unlock-style';
-    style.innerHTML = ' * { -webkit-user-select: text !important; -moz-user-select: text !important; user-select: text !important; pointer-events: auto !important; } ';
+    style.innerHTML = '*{-webkit-user-select:text!important;-moz-user-select:text!important;user-select:text!important;pointer-events:auto!important}';
     if (!document.getElementById('ai-unlock-style')) document.head.appendChild(style);
-
     ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup'].forEach(evt => {
         window.addEventListener(evt, (e) => { e.stopPropagation(); }, true);
     });
 }
 
-// ============================================================================
-// 4. DOM CLEANUP
-// ============================================================================
 function cleanupAIElements() {
-    document.querySelectorAll('.ai-stealth-badge, .ai-marker, .ai-solution-panel, .ai-status-indicator, .ai-stealth-notify').forEach(el => el.remove());
+    document.querySelectorAll('.ai-stealth-badge,.ai-marker,.ai-status-indicator,.ai-stealth-notify').forEach(el => el.remove());
+    statusIndicator = null;
+    stealthNotification = null;
 }
 
-// Cleanup on navigation (SPA support)
 window.addEventListener('beforeunload', cleanupAIElements);
-
-// MutationObserver for SPA navigation detection
 let lastUrl = location.href;
 const urlObserver = new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        cleanupAIElements();
-    }
+    if (location.href !== lastUrl) { lastUrl = location.href; cleanupAIElements(); }
 });
 urlObserver.observe(document.body, { childList: true, subtree: true });
 
-// ============================================================================
-// 5. IMAGE PROCESSING
-// ============================================================================
 async function processImageSource(url) {
     if (!url) return null;
     try {
@@ -221,24 +150,17 @@ async function processImageSource(url) {
             const comma = url.indexOf(',');
             return { inline_data: { mime_type: 'image/jpeg', data: url.substring(comma + 1) } };
         }
-
         const response = await fetch(url);
         if (!response.ok) throw new Error('Fetch error');
         const blob = await response.blob();
-
         let validMime = blob.type;
-        if (!validMime || validMime === 'application/octet-stream') {
-            validMime = 'image/jpeg';
-        }
-
+        if (!validMime || validMime === 'application/octet-stream') validMime = 'image/jpeg';
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve({ inline_data: { mime_type: validMime, data: reader.result.split(',')[1] } });
             reader.readAsDataURL(blob);
         });
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
 }
 
 async function getAnnotatedMap(bgImg, dropzones) {
@@ -248,24 +170,19 @@ async function getAnnotatedMap(bgImg, dropzones) {
         canvas.width = bgImg.naturalWidth || bgImg.width || 800;
         canvas.height = bgImg.naturalHeight || bgImg.height || 600;
         const ctx = canvas.getContext('2d');
-
         bgImg.crossOrigin = "anonymous";
         ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-
         const scaleX = canvas.width / bgImg.offsetWidth;
         const scaleY = canvas.height / bgImg.offsetHeight;
         const bgRect = bgImg.getBoundingClientRect();
-
         ctx.font = "bold 60px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.lineWidth = 4;
-
         dropzones.forEach((zone, idx) => {
             const zRect = zone.getBoundingClientRect();
             const x = (zRect.left - bgRect.left + zRect.width / 2) * scaleX;
             const y = (zRect.top - bgRect.top + zRect.height / 2) * scaleY;
-
             ctx.fillStyle = "#d32f2f";
             ctx.beginPath();
             ctx.arc(x, y, 40, 0, Math.PI * 2);
@@ -273,50 +190,34 @@ async function getAnnotatedMap(bgImg, dropzones) {
             ctx.fillStyle = "white";
             ctx.fillText(idx + 1, x, y);
         });
-
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         return { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } };
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
 }
 
-// ============================================================================
-// 6. PARSERS
-// ============================================================================
 function extractQuestions() {
     const questions = [];
 
-    // --- A. MOODLE (Universal) ---
     const moodleQuestions = document.querySelectorAll('.que');
     if (moodleQuestions.length > 0) {
         moodleQuestions.forEach((el, i) => {
             if (el.classList.contains('description')) return;
-
             const textEl = el.querySelector('.qtext');
-
-            // Short Answer / Essay (fill-in text)
             const fillInput = el.querySelector('.shortanswer input[type="text"]') ||
-                              el.querySelector('.essay textarea') ||
-                              el.querySelector('.shortanswer textarea');
+                el.querySelector('.essay textarea') ||
+                el.querySelector('.shortanswer textarea');
             if (textEl && fillInput) {
                 questions.push({
-                    type: 'text_input',
-                    platform: 'moodle',
-                    number: i + 1,
+                    type: 'text_input', platform: 'moodle', number: i + 1,
                     text: textEl.innerText.trim(),
                     images: Array.from(el.querySelectorAll('.qtext img')).map(img => img.src).filter(Boolean),
-                    inputElement: fillInput,
-                    domElement: el
+                    inputElement: fillInput, domElement: el
                 });
                 return;
             }
-
             const bgImg = el.querySelector('.dropbackground');
             const dropzones = Array.from(el.querySelectorAll('.dropzone'));
             const answers = [];
-
-            // Drag & Drop
             if (bgImg && dropzones.length > 0) {
                 const seen = new Set();
                 el.querySelectorAll('.draghome:not(.dragplaceholder)').forEach(d => {
@@ -325,27 +226,15 @@ function extractQuestions() {
                     const contentKey = text + (imgSrc || "");
                     if (!seen.has(contentKey) && (text || imgSrc)) {
                         seen.add(contentKey);
-                        answers.push({
-                            id: String.fromCharCode(65 + answers.length),
-                            text: text,
-                            imgSrc: imgSrc,
-                            element: d
-                        });
+                        answers.push({ id: String.fromCharCode(65 + answers.length), text, imgSrc, element: d });
                     }
                 });
                 questions.push({
-                    type: 'moodle_dd',
-                    platform: 'moodle',
-                    number: i + 1,
+                    type: 'moodle_dd', platform: 'moodle', number: i + 1,
                     text: textEl ? textEl.innerText.trim() : "D&D Task",
-                    bgImgElement: bgImg,
-                    dropzones: dropzones,
-                    answers: answers,
-                    domElement: el
+                    bgImgElement: bgImg, dropzones, answers, domElement: el
                 });
-            }
-            // Regular Choice
-            else {
+            } else {
                 const options = el.querySelectorAll('.answer div, .answer li, table.answer tr');
                 options.forEach((opt, idx) => {
                     const label = opt.querySelector('label');
@@ -355,25 +244,17 @@ function extractQuestions() {
                         const img = opt.querySelector('img')?.src;
                         const targetEl = input || label || opt;
                         answers.push({
-                            id: String.fromCharCode(65 + idx),
-                            text: txt,
-                            imgSrc: img,
-                            element: targetEl,
-                            textElement: opt
+                            id: String.fromCharCode(65 + idx), text: txt, imgSrc: img,
+                            element: targetEl, textElement: opt
                         });
                     }
                 });
-
                 if (answers.length > 0) {
                     questions.push({
-                        type: 'choice',
-                        platform: 'moodle',
-                        number: i + 1,
+                        type: 'choice', platform: 'moodle', number: i + 1,
                         text: textEl ? textEl.innerText.trim() : "Question",
-                        images: [],
-                        answers: answers,
-                        isMultiSelect: el.classList.contains('multichoice'),
-                        domElement: el
+                        images: [], answers,
+                        isMultiSelect: el.classList.contains('multichoice'), domElement: el
                     });
                 }
             }
@@ -381,45 +262,26 @@ function extractQuestions() {
         return questions;
     }
 
-    // --- B. PLATONUS ---
     const platonusWrapper = document.querySelector('.question-wrapper, div[ng-bind-html="question.questionText"]');
     if (platonusWrapper) {
         const text = platonusWrapper.innerText.trim();
         const qImages = [];
         platonusWrapper.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
-
         const answers = [];
         document.querySelectorAll('.table-question tbody tr, .answer-variant').forEach((row, idx) => {
             const letterId = String.fromCharCode(65 + idx);
             const input = row.querySelector('input');
             const cells = row.querySelectorAll('td');
             const textContainer = cells.length > 1 ? cells[1] : row.querySelector('label');
-
             if (input && textContainer) {
-                answers.push({
-                    id: letterId,
-                    text: textContainer.innerText.trim(),
-                    imgSrc: textContainer.querySelector('img')?.src,
-                    element: input,
-                    textElement: textContainer
-                });
+                answers.push({ id: letterId, text: textContainer.innerText.trim(), imgSrc: textContainer.querySelector('img')?.src, element: input, textElement: textContainer });
             }
         });
-
         if (answers.length > 0) {
-            questions.push({
-                type: 'choice',
-                platform: 'platonus',
-                text: text,
-                images: qImages,
-                answers: answers,
-                isMultiSelect: document.querySelector('input[type="checkbox"]') !== null,
-                domElement: platonusWrapper
-            });
+            questions.push({ type: 'choice', platform: 'platonus', text, images: qImages, answers, isMultiSelect: document.querySelector('input[type="checkbox"]') !== null, domElement: platonusWrapper });
         }
     }
 
-    // --- C. UNIVER ---
     const univerTables = document.querySelectorAll('table.question');
     if (univerTables.length > 0) {
         univerTables.forEach((table, i) => {
@@ -427,7 +289,6 @@ function extractQuestions() {
             const qImages = [];
             textElem?.querySelectorAll('img').forEach(img => { if (img.src) qImages.push(img.src); });
             const answerTable = table.nextElementSibling;
-
             if (answerTable && answerTable.tagName === 'TABLE') {
                 const answers = [];
                 answerTable.querySelectorAll('tr').forEach(row => {
@@ -435,86 +296,81 @@ function extractQuestions() {
                     const textDiv = row.querySelector('.text');
                     const input = row.querySelector('input');
                     if (label && input) {
-                        answers.push({
-                            id: label.innerText.replace('.', '').trim(),
-                            text: textDiv ? textDiv.innerText.trim() : '',
-                            imgSrc: textDiv?.querySelector('img')?.src,
-                            element: input,
-                            textElement: label
-                        });
+                        answers.push({ id: label.innerText.replace('.', '').trim(), text: textDiv ? textDiv.innerText.trim() : '', imgSrc: textDiv?.querySelector('img')?.src, element: input, textElement: label });
                     }
                 });
                 if (answers.length > 0) {
-                    questions.push({
-                        type: 'choice',
-                        platform: 'univer',
-                        number: i + 1,
-                        text: textElem ? textElem.innerText.trim() : "Q",
-                        images: qImages,
-                        answers: answers,
-                        isMultiSelect: answerTable.dataset.qtype === '2',
-                        domElement: table
-                    });
+                    questions.push({ type: 'choice', platform: 'univer', number: i + 1, text: textElem ? textElem.innerText.trim() : "Q", images: qImages, answers, isMultiSelect: answerTable.dataset.qtype === '2', domElement: table });
                 }
             }
         });
     }
-
     return questions;
 }
 
-// ============================================================================
-// 7. API CLIENT WITH RETRY & EXPONENTIAL BACKOFF
-// ============================================================================
-async function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// Stealth typing: simulates human input to bypass keystroke detection
 async function typeAnswer(el, text) {
     el.focus();
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-    // Clear without triggering React/Vue synthetic events
     nativeSetter.call(el, '');
     el.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(80 + Math.random() * 120);
-
     for (const char of text) {
         nativeSetter.call(el, el.value + char);
         el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: char }));
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: char }));
-        await sleep(30 + Math.random() * 80); // 30–110ms per char, human-like
+        await sleep(30 + Math.random() * 80);
     }
     el.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(50);
     el.blur();
 }
 
-async function askGeminiWithRetry(q, apiKeys, models, attempt = 1) {
+async function askGeminiViaBackground(parts, apiKeys, models) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+            { action: 'ask_gemini', parts, apiKeys, models },
+            (response) => {
+                if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+                if (response?.error) return reject(new Error(response.error));
+                if (response?.result) return resolve(response);
+                reject(new Error('No response from background'));
+            }
+        );
+    });
+}
+
+async function askGeminiWithRetry(parts, apiKeys, models, attempt = 1) {
     try {
-        return await askGemini(q, apiKeys, models);
+        return await askGeminiViaBackground(parts, apiKeys, models);
     } catch (error) {
         if (attempt < RETRY_CONFIG.maxAttempts) {
             const delay = RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt - 1);
-            console.log(`⏳ Retry attempt ${attempt + 1} in ${delay}ms...`);
-            showStatus(`${I18N.t('status.retrying')} ${attempt + 1}`, 'orange');
+            showStatus('...', 'orange');
             await sleep(delay);
-            return askGeminiWithRetry(q, apiKeys, models, attempt + 1);
+            return askGeminiWithRetry(parts, apiKeys, models, attempt + 1);
         }
         throw error;
     }
 }
 
-async function askGemini(q, apiKeys, models) {
+async function buildApiParts(q) {
     const parts = [];
     let imgCount = 0;
+
+    const systemPrompt = `You are a precise academic test solver. Rules:
+1. Always answer in the SAME LANGUAGE as the question
+2. For multiple correct answers, list ALL correct options
+3. Return ONLY valid JSON, no markdown fences
+4. If unsure, pick the MOST LIKELY answer
+5. Keep "reason" under 20 words`;
 
     if (q.type === 'moodle_dd') {
         const mapPart = await getAnnotatedMap(q.bgImgElement, q.dropzones);
         if (mapPart) { parts.push(mapPart); imgCount++; }
-
         let itemsText = "";
         for (const ans of q.answers) {
             let line = `Item ${ans.id}: ${ans.text}`;
@@ -524,344 +380,158 @@ async function askGemini(q, apiKeys, models) {
             }
             itemsText += line + "\n";
         }
-
-        parts.push({
-            text: `Task: Drag & Drop.\n
-            The image has red numbered ZONES (1, 2, 3...).\n
-            Match ITEMS (A, B, C...) to these ZONES.\n
-            Items list:\n${itemsText}\n
-            Return STRICT JSON: {"pairs": [{"zone": 1, "item": "A"}, {"zone": 2, "item": "B"}]}`
-        });
+        parts.push({ text: `${systemPrompt}\n\nTask: Drag & Drop.\nThe image has red numbered ZONES (1, 2, 3...).\nMatch ITEMS (A, B, C...) to these ZONES.\nItems list:\n${itemsText}\nReturn STRICT JSON: {"pairs": [{"zone": 1, "item": "A"}, {"zone": 2, "item": "B"}], "reason": "short"}` });
     } else if (q.type === 'text_input') {
         if (q.images?.length) {
-            for (const url of q.images) {
-                const p = await processImageSource(url);
-                if (p) { parts.push(p); imgCount++; }
-            }
+            for (const url of q.images) { const p = await processImageSource(url); if (p) { parts.push(p); imgCount++; } }
         }
-        parts.push({
-            text: `Question: ${q.text}\nProvide a short, precise answer (1–10 words max).\nReturn JSON: {"answer": "...", "reason": "brief explanation"}`
-        });
+        parts.push({ text: `${systemPrompt}\n\nQuestion: ${q.text}\nProvide a short, precise answer (1-10 words max).\nReturn JSON: {"answer": "...", "reason": "brief explanation"}` });
     } else {
-        if (q.images) {
-            for (const url of q.images) {
-                const p = await processImageSource(url);
-                if (p) { parts.push(p); imgCount++; }
-            }
-        }
+        if (q.images) { for (const url of q.images) { const p = await processImageSource(url); if (p) { parts.push(p); imgCount++; } } }
         let optionsText = "";
         for (const ans of q.answers) {
             let line = `${ans.id}. ${ans.text}`;
-            if (ans.imgSrc) {
-                const p = await processImageSource(ans.imgSrc);
-                if (p) { parts.push(p); imgCount++; line += " [Image Attached]"; }
-            }
+            if (ans.imgSrc) { const p = await processImageSource(ans.imgSrc); if (p) { parts.push(p); imgCount++; line += " [Image Attached]"; } }
             optionsText += line + "\n";
         }
-        parts.push({
-            text: `Question: ${q.text}\nOptions:\n${optionsText}\nReturn JSON: {"correct": ["A"], "reason": "short"}`
-        });
+        parts.push({ text: `${systemPrompt}\n\nQuestion: ${q.text}\nOptions:\n${optionsText}\nReturn JSON: {"correct": ["A"], "reason": "short"}` });
     }
 
-    console.groupCollapsed(`🚀 Sending Request (Images: ${imgCount})`);
-    console.log("Prompt:", parts[parts.length - 1].text);
-    console.groupEnd();
-
-    const requestBody = {
-        contents: [{ parts: parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
-    };
-
-    let lastError = null;
-    let rateLimitHit = false;
-
-    for (const model of models) {
-        for (let i = 0; i < apiKeys.length; i++) {
-            const keyIndex = (currentKeyIndex + i) % apiKeys.length;
-            try {
-                console.log(`📡 Trying ${model}...`);
-                const res = await fetch(`${BASE_URL}${model}:generateContent?key=${apiKeys[keyIndex]}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
-                });
-
-                if (res.status === 429 || res.status === 503) {
-                    rateLimitHit = true;
-                    console.warn(`⚠️ Rate limit/overload on ${model}, trying next...`);
-                    continue;
-                }
-
-                if (!res.ok) {
-                    lastError = await res.text();
-                    throw new Error(lastError);
-                }
-
-                const data = await res.json();
-                currentKeyIndex = keyIndex;
-                const resultText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-                const json = JSON.parse(resultText);
-                console.log("✅ Success:", json);
-
-                return { result: json, model: model };
-
-            } catch (e) {
-                lastError = e;
-                console.error("API Error:", e);
-            }
-        }
-    }
-
-    // Log rate limit if all failed due to it
-    if (rateLimitHit) {
-        chrome.runtime.sendMessage({
-            action: 'log_event',
-            type: 'rate_limit',
-            model: 'all',
-            meta: { keys_tried: apiKeys.length }
-        });
-        showStealthNotify(I18N.t('notify.rateLimitWait'), 'warning', 4000);
-    }
-
-    throw new Error(lastError?.message || 'All models failed');
+    return { parts, imgCount };
 }
 
-// ============================================================================
-// 8. VISUALIZATION & LOGIC
-// ============================================================================
-
-function createStealthBadge(targetElement, text, color, reason = null) {
-    if (!targetElement) return;
-    const rect = targetElement.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0 || rect.top < 0) return;
-
-    const badge = document.createElement('div');
-    badge.innerText = text;
-    badge.className = 'ai-stealth-badge';
-    badge.style.cssText = `
-        position: absolute;
-        top: ${window.scrollY + rect.top - 8}px;
-        left: ${window.scrollX + rect.left}px;
-        background: rgba(255, 255, 255, 0.85);
-        color: ${color};
-        font-family: sans-serif; font-size: 10px; font-weight: bold;
-        padding: 1px 4px; border-radius: 3px;
-        border: 1px solid #ccc;
-        z-index: 2147483647;
-        pointer-events: ${reason ? 'auto' : 'none'};
-        cursor: ${reason ? 'help' : 'default'};
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        white-space: nowrap;
-    `;
-
-    if (reason) {
-        const tip = document.createElement('div');
-        tip.style.cssText = `
-            display: none; position: absolute;
-            bottom: calc(100% + 5px); left: 0;
-            background: rgba(18, 18, 18, 0.97);
-            color: #e8e8e8; font-size: 11px; font-weight: normal;
-            padding: 7px 11px; border-radius: 6px;
-            max-width: 240px; white-space: normal; line-height: 1.5;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
-            pointer-events: none; z-index: 2147483647;
-        `;
-        tip.innerText = reason;
-        badge.appendChild(tip);
-        badge.addEventListener('mouseenter', () => tip.style.display = 'block');
-        badge.addEventListener('mouseleave', () => tip.style.display = 'none');
-    }
-
-    document.body.appendChild(badge);
-}
-
-function injectInlineMarker(targetElement, text, reason = null) {
+function injectDotMarker(targetElement, reason = null) {
     if (!targetElement) return;
     if (targetElement.innerHTML.includes('ai-marker')) return;
     const marker = document.createElement('span');
     marker.className = 'ai-marker';
-    marker.innerHTML = ` ${text}`;
-    marker.style.cssText = `color: ${MARKER_COLOR}; font-weight: bold; font-size: 1.4em; margin-left: 5px;${reason ? ' cursor: help;' : ''}`;
+    marker.innerHTML = ' •';
+    marker.style.cssText = `color:${MARKER_COLOR};font-weight:bold;font-size:1.1em;margin-left:3px;${reason ? 'cursor:help;' : ''}`;
     if (reason) marker.title = reason;
     targetElement.appendChild(marker);
 }
 
 async function processQuestion(q, apiKeys, models) {
-    if (q.domElement) q.domElement.style.opacity = '0.6';
-    showStatus(I18N.t('status.thinking'));
-
-    document.querySelectorAll('.ai-stealth-badge').forEach(el => el.remove());
+    if (q.domElement) q.domElement.style.opacity = '0.7';
+    showStatus('...', 'default');
     document.querySelectorAll('.ai-marker').forEach(el => el.remove());
-    if (solutionPanel) solutionPanel.remove();
 
     const settings = await chrome.storage.sync.get(['cfgAutoClick', 'cfgMarker']);
     const doClick = settings.cfgAutoClick !== false;
     const doMark = settings.cfgMarker !== false;
 
     try {
-        const responseData = await askGeminiWithRetry(q, apiKeys, models);
-
+        const { parts } = await buildApiParts(q);
+        const responseData = await askGeminiWithRetry(parts, apiKeys, models);
         if (!responseData) throw new Error("No response");
         const { result, model } = responseData;
-
         if (q.domElement) q.domElement.style.opacity = '1';
 
-        // --- STATS ---
         let answerLog = "";
-        if (result.pairs) answerLog = "Drag & Drop Solution";
+        if (result.pairs) answerLog = "D&D";
         else if (result.correct) answerLog = result.correct.join(', ');
         else if (result.answer !== undefined) answerLog = String(result.answer);
+        chrome.runtime.sendMessage({ action: 'log_event', type: 'solve_success', model, meta: { platform: q.platform } });
 
-        chrome.runtime.sendMessage({
-            action: 'log_event',
-            type: 'solve_success',
-            model: model,
-            meta: {
-                student: getStudentName(),
-                platform: q.platform,
-                question: q.text.substring(0, 150),
-                answer_ai: answerLog,
-                has_images: (q.images?.length > 0 || q.type === 'moodle_dd')
-            }
-        });
-
-        // --- MOODLE D&D ---
         if (result && result.pairs && q.type === 'moodle_dd') {
-            const solutionLines = [];
             if (doMark) {
-                q.answers.forEach(ans => createStealthBadge(ans.element, `(${ans.id})`, '#555'));
                 result.pairs.forEach(pair => {
                     const item = q.answers.find(a => a.id === pair.item);
                     const zone = q.dropzones[pair.zone - 1];
                     if (item && zone) {
-                        createStealthBadge(zone, `→ ${item.id}`, '#2e7d32', result.reason || null);
-                        let desc = item.text || (item.imgSrc ? "[Img]" : "???");
-                        if (desc.length > 20) desc = desc.substring(0, 17) + "..";
-                        solutionLines.push(`<b>Зона ${pair.zone}</b> ➜ <b>${item.id}</b> <span style="color:#888">${desc}</span>`);
+                        injectDotMarker(zone, `${item.id} → Зона ${pair.zone}`);
                     }
                 });
-                showStatus(I18N.t('status.check'), '#2e7d32');
-                showSolutionPanel(solutionLines);
             }
+            showStatus('✓', 'green');
             showStealthNotify(I18N.t('notify.dragDropSolved'), 'success');
-        }
-
-        // --- TEXT INPUT (shortanswer / essay) ---
-        else if (result && result.answer !== undefined && q.type === 'text_input') {
-            if (doClick) {
-                await typeAnswer(q.inputElement, String(result.answer));
-            }
+        } else if (result && result.answer !== undefined && q.type === 'text_input') {
+            if (doClick) await typeAnswer(q.inputElement, String(result.answer));
             if (doMark && result.reason) {
-                const container = q.inputElement.closest('.formulation, .shortanswer, .essay') ||
-                                  q.inputElement.parentElement;
-                injectInlineMarker(container, '•', result.reason);
+                const container = q.inputElement.closest('.formulation, .shortanswer, .essay') || q.inputElement.parentElement;
+                injectDotMarker(container, result.reason);
             }
-            showStatus(I18N.t('status.done'), '#2e7d32');
+            showStatus('✓', 'green');
             showStealthNotify(I18N.t('notify.textAnswered'), 'success');
-        }
-
-        // --- CHOICE ---
-        else if (result && result.correct) {
+        } else if (result && result.correct) {
             let found = false;
             q.answers.forEach(ans => {
                 if (result.correct.includes(ans.id) || result.correct.some(c => ans.text.includes(c))) {
                     found = true;
-                    if (doClick && !ans.element.checked) {
-                        ans.element.click();
-                        console.log(`🖱️ Clicked ${ans.id}`);
-                    }
-                    if (doMark) {
-                        if (q.platform === 'moodle') {
-                            createStealthBadge(ans.element, '✓', '#2e7d32', result.reason || null);
-                        } else {
-                            if (ans.textElement) injectInlineMarker(ans.textElement, '•', result.reason || null);
-                        }
-                    }
+                    if (doClick && !ans.element.checked) ans.element.click();
+                    if (doMark && ans.textElement) injectDotMarker(ans.textElement, result.reason || null);
                 }
             });
-            showStatus(found ? I18N.t('status.done') : I18N.t('status.check'), found ? '#2e7d32' : 'orange');
+            showStatus(found ? '✓' : '?', found ? 'green' : 'orange');
             if (found) showStealthNotify(I18N.t('notify.answerFound'), 'success');
         }
     } catch (e) {
         if (q.domElement) q.domElement.style.opacity = '1';
-        console.error(e);
-        showStatus(I18N.t('status.error'), 'red');
-        showStealthNotify(I18N.t('notify.error') + ': ' + (e.message || '?'), 'error');
+        showStatus('!', 'red');
+        showStealthNotify(I18N.t('notify.error'), 'error', 2000);
     }
 }
 
 async function start() {
-    // Check if enabled
-    if (!await checkEnabled()) {
-        console.log('🔴 AI Solver is disabled');
-        return;
-    }
+    if (!await checkEnabled()) return;
 
     const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
-    const keys = storage.geminiApiKeys || [];
+    let keys = storage.geminiApiKeys || [];
+
+    const extracted = await autoExtractApiKey();
+    if (extracted && !keys.includes(extracted)) keys.push(extracted);
+
     const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
+
     if (!keys.length) {
         showStealthNotify(I18N.t('notify.noApiKeys'), 'warning');
-        return showStatus(I18N.t('status.noKeys'), 'red');
+        return;
     }
 
     const qs = extractQuestions();
     if (!qs.length) {
         showStealthNotify(I18N.t('notify.questionsNotFound'), 'warning');
-        return showStatus(I18N.t('status.noQuestions'), 'orange');
+        return;
     }
 
     for (let i = 0; i < qs.length; i++) {
-        // Show progress only when there are multiple questions on the page (Univer/Moodle)
-        if (qs.length > 1) showStatus(`[${i + 1}/${qs.length}]`);
+        if (qs.length > 1) showStatus(`${i + 1}/${qs.length}`, 'default');
         await processQuestion(qs[i], keys, models);
     }
 
-    if (qs.length > 1) {
-        showStealthNotify(`${I18N.t('notify.allSolved')}: ${qs.length}`, 'success');
-    }
+    if (qs.length > 1) showStealthNotify(`${I18N.t('notify.allSolved')}: ${qs.length}`, 'success');
     hideStatus();
 }
 
 async function init() {
-    // Check if enabled before doing anything
-    if (!await checkEnabled()) {
-        console.log('🔴 AI Solver is disabled, skipping init');
-        return;
-    }
-
-    await I18N.init(); // Load language preference
+    if (!await checkEnabled()) return;
+    await I18N.init();
     unlockSite();
+    await autoExtractApiKey();
 
     window.addEventListener('keydown', (e) => {
-        if (e.altKey && e.code === HOTKEY_CODE) {
-            e.preventDefault();
-            start();
-        }
+        if (e.altKey && e.code === HOTKEY_CODE) { e.preventDefault(); start(); }
     }, true);
 
     window.addEventListener('click', async (e) => {
         if (e.altKey) {
             const el = e.target.closest('.que, .question-wrapper, table.question');
             if (el) {
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
                 const models = storage.cfgProModels ? MODEL_HIERARCHY_PRO : MODEL_HIERARCHY_FREE;
+                const keys = storage.geminiApiKeys || [];
                 const qs = extractQuestions();
                 const q = qs.find(x => x.domElement === el) || qs[0];
-                if (q && storage.geminiApiKeys) processQuestion(q, storage.geminiApiKeys, models);
+                if (q && keys.length) processQuestion(q, keys, models);
             }
         }
     }, true);
 
-    // Listen for enable/disable changes
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'sync' && changes.isEnabled) {
             isExtensionEnabled = changes.isEnabled.newValue !== false;
-            if (!isExtensionEnabled) {
-                cleanupAIElements();
-            }
+            if (!isExtensionEnabled) cleanupAIElements();
         }
     });
 }

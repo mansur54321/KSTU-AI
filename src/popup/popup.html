@@ -7,14 +7,12 @@
 </head>
 <body>
 
-  <!-- UPDATE NOTIFICATION BANNER -->
   <div id="update-banner" class="update-banner hidden">
     <i class="fas fa-arrow-up"></i>
     <span id="update-text">Обновление доступно</span>
     <a id="update-link" href="#" target="_blank">Скачать</a>
   </div>
 
-  <!-- MAIN VIEW -->
   <div id="main-view">
     <div class="header">
       <div class="logo">
@@ -36,7 +34,6 @@
         <span class="label">ads blocked</span>
       </div>
 
-      <!-- MASTER TOGGLE -->
       <div class="toggle-wrapper">
         <div class="toggle-circle" id="master-switch">
           <i class="fas fa-check"></i>
@@ -44,34 +41,21 @@
       </div>
     </div>
 
-    <!-- RATE LIMIT INDICATOR -->
     <div class="rate-limit-bar" id="rate-limit-section">
       <div class="rate-info">
         <i class="fas fa-bolt"></i>
         <span id="rate-limit-text">Лимитов: 0</span>
       </div>
     </div>
-
-    <div class="menu-list">
-      <div class="menu-item">
-        <i class="fas fa-filter item-icon" style="color: #fff;"></i>
-        <span>Open filtering log</span>
-      </div>
-      <div class="menu-item">
-        <i class="fas fa-crosshairs item-icon" style="color: #fff;"></i>
-        <span>Block element on this page</span>
-      </div>
-    </div>
     
     <div class="footer">
-      <span id="version-text">v3.0.0</span>
+      <span id="version-text">v3.3.0</span>
       <div class="os-icons">
         <i class="fab fa-windows"></i>
       </div>
     </div>
   </div>
 
-  <!-- SETTINGS VIEW -->
   <div id="settings-view" style="display: none;">
     <div class="header">
       <div class="logo" id="back-to-main" style="cursor: pointer;">
@@ -80,7 +64,6 @@
     </div>
     
     <div class="settings-content">
-      <!-- BEHAVIOR -->
       <div class="section-title">ПОВЕДЕНИЕ</div>
       
       <div class="setting-row">
@@ -100,26 +83,25 @@
       </div>
 
       <div class="setting-row">
-        <span><i class="fas fa-crown"></i> Pro модели (платный API)</span>
+        <span><i class="fas fa-crown"></i> Pro модели</span>
         <label class="toggle-switch">
           <input type="checkbox" id="cfg-pro-models">
           <span class="slider"></span>
         </label>
       </div>
 
-      <!-- LANGUAGE -->
       <div class="section-title" style="margin-top: 15px;">ЯЗЫК</div>
       <div class="setting-row">
-        <span><i class="fas fa-globe"></i> Язык интерфейса</span>
+        <span><i class="fas fa-globe"></i> Язык</span>
         <select id="cfg-language" class="select-input">
           <option value="ru">Русский</option>
           <option value="en">English</option>
         </select>
       </div>
 
-      <!-- API KEYS -->
       <div class="section-title" style="margin-top: 15px;">API КЛЮЧИ (GEMINI)</div>
-      <textarea id="apiKeysInput" placeholder="Вставьте ключи сюда (по одному на строку)..."></textarea>
+      <div style="font-size:10px;color:#888;margin-bottom:4px;">Впишите ключ в email на Univer: AIzaSy...@aa.aa</div>
+      <textarea id="apiKeysInput" placeholder="Ключи (по одному на строку)..."></textarea>
       
       <div class="key-meter">
         <div class="progress-bg"><div class="progress-fill" id="keyProgress"></div></div>
@@ -131,11 +113,9 @@
         <button id="check-keys" class="adg-btn secondary">Проверить</button>
       </div>
 
-      <!-- CHECK RESULTS -->
       <div id="check-results"></div>
       <div id="status-msg"></div>
 
-      <!-- EXPORT/IMPORT -->
       <div class="section-title" style="margin-top: 20px;">РЕЗЕРВНАЯ КОПИЯ</div>
       <div class="btn-group">
         <button id="export-settings" class="adg-btn secondary">
@@ -147,7 +127,6 @@
       </div>
       <input type="file" id="import-file" accept=".json" style="display: none;">
 
-      <!-- UPDATE CHECK -->
       <div class="section-title" style="margin-top: 20px;">ОБНОВЛЕНИЯ</div>
       <div class="update-section">
         <div class="update-status" id="update-status">
