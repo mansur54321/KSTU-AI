@@ -9,7 +9,7 @@ const CONFIG = {
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.0'
+    VERSION: '3.4.1'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
