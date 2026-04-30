@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cfgMarker = document.getElementById('cfg-marker');
     const cfgLanguage = document.getElementById('cfg-language');
     const cfgProModels = document.getElementById('cfg-pro-models');
+    const cfgFastMode = document.getElementById('cfg-fast-mode');
+    const cfgFastModeRow = document.getElementById('cfg-fast-mode-row');
     const exportBtn = document.getElementById('export-settings');
     const importBtn = document.getElementById('import-settings');
     const importFile = document.getElementById('import-file');
@@ -36,7 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const data = await chrome.storage.sync.get([
         'isEnabled', 'solvedCount', 'geminiApiKeys',
-        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels'
+        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels', 'cfgFastMode'
     ]);
 
     let isEnabled = data.isEnabled !== false;
@@ -47,6 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let language = data.language || 'ru';
     let rateLimitHits = data.rateLimitHits || 0;
     let proModels = data.cfgProModels || false;
+    let fastMode = data.cfgFastMode || false;
 
     updateMasterUI(isEnabled);
     solveCountEl.innerText = solvedCount;
@@ -56,6 +59,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgMarker.checked = marker;
     cfgLanguage.value = language;
     cfgProModels.checked = proModels;
+    cfgFastMode.checked = fastMode && proModels;
+    updateFastModeVisibility(proModels);
     versionText.innerText = 'v' + chrome.runtime.getManifest().version;
     rateLimitText.innerText = `Лимитов: ${rateLimitHits}`;
 
@@ -87,6 +92,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function updateFastModeVisibility(proEnabled) {
+        cfgFastModeRow.style.display = proEnabled ? 'flex' : 'none';
+        cfgFastMode.disabled = !proEnabled;
+        if (!proEnabled) cfgFastMode.checked = false;
+    }
+
     openSettingsBtn.addEventListener('click', () => {
         mainView.style.display = 'none';
         settingsView.style.display = 'block';
@@ -100,7 +111,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgAutoClick.addEventListener('change', (e) => chrome.storage.sync.set({ cfgAutoClick: e.target.checked }));
     cfgMarker.addEventListener('change', (e) => chrome.storage.sync.set({ cfgMarker: e.target.checked }));
     cfgLanguage.addEventListener('change', (e) => chrome.storage.sync.set({ language: e.target.value }));
-    cfgProModels.addEventListener('change', (e) => chrome.storage.sync.set({ cfgProModels: e.target.checked }));
+    cfgProModels.addEventListener('change', (e) => {
+        const enabled = e.target.checked;
+        updateFastModeVisibility(enabled);
+        chrome.storage.sync.set({ cfgProModels: enabled, cfgFastMode: enabled ? cfgFastMode.checked : false });
+    });
+    cfgFastMode.addEventListener('change', (e) => chrome.storage.sync.set({ cfgFastMode: e.target.checked && cfgProModels.checked }));
 
     keysInput.addEventListener('input', () => {
         const count = parseApiKeys(keysInput.value).length;
@@ -185,6 +201,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (importData.cfgMarker !== undefined) cfgMarker.checked = importData.cfgMarker;
             if (importData.language) cfgLanguage.value = importData.language;
             if (importData.cfgProModels !== undefined) cfgProModels.checked = importData.cfgProModels;
+            if (importData.cfgFastMode !== undefined) cfgFastMode.checked = importData.cfgFastMode && cfgProModels.checked;
+            updateFastModeVisibility(cfgProModels.checked);
             statusMsg.innerText = 'Импортировано!';
             statusMsg.style.color = '#67b279';
         } catch (err) {

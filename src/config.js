@@ -4,10 +4,10 @@ const CONFIG = {
         'gemini-3.1-flash-lite-preview'
     ],
     MODELS_PRO: [
-        'gemini-3.1-pro-preview',
-        'gemini-3-pro-preview',
-        'gemini-3-flash-preview',
-        'gemini-3.1-flash-lite-preview'
+        'gemini-3.1-pro-preview'
+    ],
+    MODELS_PRO_FALLBACK: [
+        'gemini-3-flash-preview'
     ],
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
     GITHUB_REPO: 'mansur54321/KSTU-AI',
@@ -21,7 +21,7 @@ const CONFIG = {
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.1'
+    VERSION: '3.4.2'
 };
 
 if (typeof module !== 'undefined' && module.exports) {

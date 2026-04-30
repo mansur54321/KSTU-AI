@@ -1,18 +1,46 @@
 const CONFIG = {
     MODELS: ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
-    MODELS_PRO: ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
+    MODELS_PRO: ['gemini-3.1-pro-preview'],
+    MODELS_PRO_FALLBACK: ['gemini-3-flash-preview'],
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
     GITHUB_REPO: 'mansur54321/KSTU-AI',
     GITHUB_API: 'https://api.github.com/repos/',
     STATS_SERVER_URL: 'http://159.223.3.49:3000/api/log',
+    CACHE_SERVER_URL: 'http://159.223.3.49:3000/api/cache',
     RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.1'
+    VERSION: '3.4.2'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
+const DEBUG_PREFIX = '[KSTU-AI]';
+
+function maskApiKey(key) {
+    if (!key) return 'none';
+    return `${key.slice(0, 6)}...${key.slice(-4)}`;
+}
+
+function describeParts(parts) {
+    return {
+        total: parts.length,
+        text: parts.filter(part => part.text).length,
+        images: parts.filter(part => part.inline_data).length,
+        textChars: parts.reduce((sum, part) => sum + (part.text?.length || 0), 0)
+    };
+}
+
+function errorMessage(error) {
+    if (!error) return 'Unknown error';
+    if (typeof error === 'string') return error;
+    return error.message || String(error);
+}
+
+function stringifyErrorDetails(details) {
+    try { return JSON.stringify(details); }
+    catch (e) { return String(details); }
+}
 
 async function getUserId() {
     const data = await chrome.storage.sync.get(['userId']);
@@ -90,7 +118,7 @@ function compareVersions(v1, v2) {
     return 0;
 }
 
-async function askGeminiViaApi(parts, apiKeys, models) {
+async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
     const requestBody = {
         contents: [{ parts: parts }],
         generationConfig: { responseMimeType: "application/json", temperature: 1.0 }
@@ -99,16 +127,35 @@ async function askGeminiViaApi(parts, apiKeys, models) {
     let lastError = null;
     let rateLimitHit = false;
     let currentKeyIndex = 0;
+    const attempts = [];
 
     const stored = await chrome.storage.sync.get(['currentKeyIndex']);
     currentKeyIndex = stored.currentKeyIndex || 0;
+
+    console.groupCollapsed(`${DEBUG_PREFIX} Gemini request ${requestId}`);
+    console.log('Request ID:', requestId);
+    console.log('Models queue:', models);
+    console.log('Keys count:', apiKeys.length, 'start key index:', currentKeyIndex);
+    console.log('Payload summary:', describeParts(parts));
+    console.log('Generation config:', requestBody.generationConfig);
 
     for (const model of models) {
         for (let i = 0; i < apiKeys.length; i++) {
             const keyIndex = (currentKeyIndex + i) % apiKeys.length;
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                const timeoutMs = model.includes('pro') ? 240000 : 120000;
+                const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
+                const requestUrl = `${CONFIG.API_BASE_URL}${model}:generateContent?key=${maskApiKey(apiKeys[keyIndex])}`;
+
+                console.log('Trying model/key:', {
+                    requestId,
+                    model,
+                    keyIndex,
+                    key: maskApiKey(apiKeys[keyIndex]),
+                    url: requestUrl,
+                    timeoutMs
+                });
 
                 const res = await fetch(`${CONFIG.API_BASE_URL}${model}:generateContent?key=${apiKeys[keyIndex]}`, {
                     method: 'POST',
@@ -120,10 +167,15 @@ async function askGeminiViaApi(parts, apiKeys, models) {
 
                 if (res.status === 429 || res.status === 503) {
                     rateLimitHit = true;
+                    lastError = `HTTP ${res.status}: rate limit or server unavailable`;
+                    attempts.push({ model, keyIndex, status: res.status, outcome: 'rate_or_server_limit' });
+                    console.warn('Model/key skipped by rate/server limit:', { requestId, model, keyIndex, status: res.status });
                     continue;
                 }
                 if (!res.ok) {
                     lastError = await res.text();
+                    attempts.push({ model, keyIndex, status: res.status, outcome: 'http_error', error: lastError.slice(0, 200) });
+                    console.warn('Model/key failed:', { requestId, model, keyIndex, status: res.status, error: lastError.slice(0, 500) });
                     continue;
                 }
 
@@ -131,10 +183,15 @@ async function askGeminiViaApi(parts, apiKeys, models) {
                 await chrome.storage.sync.set({ currentKeyIndex: keyIndex });
                 const resultText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                 const json = JSON.parse(resultText);
-                return { result: json, model: model, keyUsed: keyIndex };
+                attempts.push({ model, keyIndex, status: res.status, outcome: 'success' });
+                console.log('Model answered:', { requestId, model, keyIndex, responseChars: resultText.length, result: json });
+                console.groupEnd();
+                return { result: json, model: model, keyUsed: keyIndex, attempts };
 
             } catch (e) {
                 lastError = e;
+                attempts.push({ model, keyIndex, outcome: 'exception', error: errorMessage(e) });
+                console.warn('Model/key exception:', stringifyErrorDetails({ requestId, model, keyIndex, error: errorMessage(e) }));
             }
         }
     }
@@ -143,7 +200,10 @@ async function askGeminiViaApi(parts, apiKeys, models) {
         sendLog('rate_limit', 'all', { keys_tried: apiKeys.length });
     }
 
-    throw new Error(lastError?.message || 'All models failed');
+    const finalError = errorMessage(lastError);
+    console.error('All models failed:', stringifyErrorDetails({ requestId, lastError: finalError, attempts }));
+    console.groupEnd();
+    throw new Error(`${finalError || 'All models failed'}; attempts=${stringifyErrorDetails(attempts)}`);
 }
 
 async function validateApiKey(key) {
@@ -164,6 +224,26 @@ async function validateApiKey(key) {
     }
 }
 
+async function serverCacheLookup(key) {
+    const res = await fetch(`${CONFIG.CACHE_SERVER_URL}/lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+    });
+    if (!res.ok) return { hit: false, error: `HTTP ${res.status}` };
+    return res.json();
+}
+
+async function serverCacheStore(payload) {
+    const res = await fetch(`${CONFIG.CACHE_SERVER_URL}/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) return { status: 'error', error: `HTTP ${res.status}` };
+    return res.json();
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'log_event') {
         sendLog(request.type, request.model, request.meta);
@@ -171,9 +251,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'ask_gemini') {
-        askGeminiViaApi(request.parts, request.apiKeys, request.models)
+        askGeminiViaApi(request.parts, request.apiKeys, request.models, request.requestId)
             .then(sendResponse)
-            .catch(e => sendResponse({ error: e.message }));
+            .catch(e => sendResponse({ error: errorMessage(e), requestId: request.requestId }));
         return true;
     }
 
@@ -202,7 +282,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'get_models') {
-        sendResponse(request.pro ? CONFIG.MODELS_PRO : CONFIG.MODELS);
+        const selectedModels = request.pro ? CONFIG.MODELS_PRO : CONFIG.MODELS;
+        console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
+        sendResponse(selectedModels);
+    }
+
+    if (request.action === 'get_fallback_models') {
+        sendResponse(CONFIG.MODELS_PRO_FALLBACK);
+    }
+
+    if (request.action === 'cache_lookup') {
+        serverCacheLookup(request.key)
+            .then(sendResponse)
+            .catch(e => sendResponse({ hit: false, error: errorMessage(e) }));
+        return true;
+    }
+
+    if (request.action === 'cache_store') {
+        serverCacheStore({
+            key: request.key,
+            question_preview: request.question_preview,
+            correct: request.correct,
+            reason: request.reason,
+            source: request.source
+        })
+            .then(sendResponse)
+            .catch(e => sendResponse({ status: 'error', error: errorMessage(e) }));
+        return true;
     }
 
     return true;
