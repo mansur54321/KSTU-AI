@@ -39,6 +39,34 @@ async function hashQuestion(text, answers, images = []) {
     return 'q_' + hash.slice(0, 32);
 }
 
+async function hashQuestionV344(text, answers, images = []) {
+    const normalizedQuestion = normalizeCacheText(text);
+    const questionImages = collectImageTokens(images);
+    const answerSet = answers
+        .map(a => normalizeCacheText(a?.text) || imageToken(a?.imgSrc))
+        .filter(Boolean)
+        .sort()
+        .join('|');
+    const hash = await sha256(`${normalizedQuestion}||${questionImages}||${answerSet}`);
+    return 'q_' + hash.slice(0, 32);
+}
+
+async function hashQuestionV343(text, answers) {
+    const normalizedQuestion = normalizeCacheText(text);
+    const answerSet = answers.map(a => normalizeCacheText(a.text)).filter(Boolean).sort().join('|');
+    const hash = await sha256(`${normalizedQuestion}||${answerSet}`);
+    return 'q_' + hash.slice(0, 32);
+}
+
+async function cacheKeys(text, answers, images = []) {
+    const keys = [
+        await hashQuestion(text, answers, images),
+        await hashQuestionV344(text, answers, images),
+        await hashQuestionV343(text, answers)
+    ];
+    return [...new Set(keys)];
+}
+
 function correctIdsToAnswerTexts(answers, correctIds) {
     return correctIds
         .map(id => answerIdentity(answers.find(a => a.id === id)))
@@ -102,28 +130,43 @@ async function saveCache(cache) {
 
 async function cacheLookup(text, answers, images = []) {
     if (!text || !answers?.length) return null;
-    const key = await hashQuestion(text, answers, images);
+    const keys = await cacheKeys(text, answers, images);
+    const primaryKey = keys[0];
 
-    const serverEntry = await serverCacheLookupByKey(key);
-    if (serverEntry?.correct?.length) {
-        const mapped = entryToCurrentAnswer(serverEntry, answers);
-        if (!mapped?.correct?.length) return null;
-        const cache = await getCache();
-        cache[key] = {
-            correct: serverEntry.correct,
-            correctTexts: serverEntry.correctTexts || [],
-            reason: serverEntry.reason || 'server_cache',
-            source: 'server',
-            ts: Date.now()
-        };
-        await saveCache(cache);
-        return mapped;
+    for (const key of keys) {
+        const serverEntry = await serverCacheLookupByKey(key);
+        if (serverEntry?.correct?.length) {
+            const mapped = entryToCurrentAnswer(serverEntry, answers);
+            if (!mapped?.correct?.length) continue;
+            const cache = await getCache();
+            cache[primaryKey] = {
+                correct: mapped.correct,
+                correctTexts: serverEntry.correctTexts || correctIdsToAnswerTexts(answers, mapped.correct),
+                reason: serverEntry.reason || 'server_cache',
+                source: key === primaryKey ? 'server' : 'server_legacy',
+                ts: Date.now()
+            };
+            await saveCache(cache);
+            if (key !== primaryKey) {
+                serverCacheStoreByKey(primaryKey, text, mapped.correct, 'legacy_migrated', 'attempt_view', cache[primaryKey].correctTexts);
+            }
+            return mapped;
+        }
     }
 
     const cache = await getCache();
-    const entry = cache[key];
-    if (!entry) return null;
-    return entryToCurrentAnswer(entry, answers);
+    for (const key of keys) {
+        const entry = cache[key];
+        if (!entry) continue;
+        const mapped = entryToCurrentAnswer(entry, answers);
+        if (!mapped?.correct?.length) continue;
+        if (key !== primaryKey) {
+            cache[primaryKey] = { ...entry, correct: mapped.correct, source: 'local_legacy', ts: Date.now() };
+            await saveCache(cache);
+        }
+        return mapped;
+    }
+    return null;
 }
 
 async function cacheStore(text, answers, correctIds, reason, images = []) {
