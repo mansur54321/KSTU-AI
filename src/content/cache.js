@@ -1,14 +1,41 @@
 const ANSWER_CACHE_KEY = 'answerCache';
 
-function hashQuestion(text, answers) {
-    const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
-    const answerStrs = answers.map(a => `${a.id}:${a.text.trim().toLowerCase().replace(/\s+/g, ' ')}`).join('|');
-    const raw = normalized + '||' + answerStrs;
-    let h = 0;
-    for (let i = 0; i < raw.length; i++) {
-        h = ((h << 5) - h + raw.charCodeAt(i)) | 0;
+function normalizeCacheText(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function sha256(value) {
+    const bytes = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashQuestion(text, answers) {
+    const normalizedQuestion = normalizeCacheText(text);
+    const answerSet = answers.map(a => normalizeCacheText(a.text)).filter(Boolean).sort().join('|');
+    const hash = await sha256(`${normalizedQuestion}||${answerSet}`);
+    return 'q_' + hash.slice(0, 32);
+}
+
+function correctIdsToAnswerTexts(answers, correctIds) {
+    return correctIds
+        .map(id => answers.find(a => a.id === id)?.text)
+        .filter(Boolean)
+        .map(normalizeCacheText);
+}
+
+function answerTextsToCurrentIds(answers, correctTexts) {
+    const correctSet = new Set((correctTexts || []).map(normalizeCacheText));
+    return answers.filter(a => correctSet.has(normalizeCacheText(a.text))).map(a => a.id);
+}
+
+function entryToCurrentAnswer(entry, answers) {
+    if (!entry) return null;
+    if (entry.correctTexts?.length) {
+        const currentIds = answerTextsToCurrentIds(answers, entry.correctTexts);
+        if (currentIds.length) return { correct: currentIds, reason: entry.reason || 'cache', source: entry.source || 'cache' };
     }
-    return 'q_' + Math.abs(h).toString(36);
+    return { correct: entry.correct || [], reason: entry.reason || 'cache', source: entry.source || 'cache' };
 }
 
 async function serverCacheLookupByKey(key) {
@@ -20,12 +47,13 @@ async function serverCacheLookupByKey(key) {
     });
 }
 
-async function serverCacheStoreByKey(key, text, correctIds, reason, source = 'client') {
+async function serverCacheStoreByKey(key, text, correctIds, reason, source = 'client', correctTexts = []) {
     chrome.runtime.sendMessage({
         action: 'cache_store',
         key,
         question_preview: text,
         correct: correctIds,
+        correctTexts,
         reason: reason || '',
         source
     });
@@ -42,33 +70,38 @@ async function saveCache(cache) {
 
 async function cacheLookup(text, answers) {
     if (!text || !answers?.length) return null;
-    const key = hashQuestion(text, answers);
+    const key = await hashQuestion(text, answers);
 
     const serverEntry = await serverCacheLookupByKey(key);
     if (serverEntry?.correct?.length) {
+        const mapped = entryToCurrentAnswer(serverEntry, answers);
+        if (!mapped?.correct?.length) return null;
         const cache = await getCache();
         cache[key] = {
             correct: serverEntry.correct,
+            correctTexts: serverEntry.correctTexts || [],
             reason: serverEntry.reason || 'server_cache',
+            source: 'server',
             ts: Date.now()
         };
         await saveCache(cache);
-        return { correct: serverEntry.correct, reason: serverEntry.reason || 'server_cache', source: 'server' };
+        return mapped;
     }
 
     const cache = await getCache();
     const entry = cache[key];
     if (!entry) return null;
-    return entry;
+    return entryToCurrentAnswer(entry, answers);
 }
 
 async function cacheStore(text, answers, correctIds, reason) {
     if (!text || !answers?.length || !correctIds?.length) return;
-    const key = hashQuestion(text, answers);
+    const key = await hashQuestion(text, answers);
+    const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
     const cache = await getCache();
-    cache[key] = { correct: correctIds, reason: reason || '', ts: Date.now() };
+    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', ts: Date.now() };
     await saveCache(cache);
-    await serverCacheStoreByKey(key, text, correctIds, reason, 'local');
+    await serverCacheStoreByKey(key, text, correctIds, reason, 'local', correctTexts);
 }
 
 async function cacheStoreFromResult(text, answers, result) {
@@ -126,14 +159,15 @@ async function cacheFromAttemptView() {
     }
     const cache = await getCache();
     let added = 0;
-    questions.forEach(q => {
-        const key = hashQuestion(q.text, q.answers);
+    for (const q of questions) {
+        const key = await hashQuestion(q.text, q.answers);
+        const correctTexts = correctIdsToAnswerTexts(q.answers, [q.correct]);
         if (!cache[key]) {
-            cache[key] = { correct: [q.correct], reason: 'from_results', ts: Date.now() };
+            cache[key] = { correct: [q.correct], correctTexts, reason: 'from_results', ts: Date.now() };
             added++;
         }
-        serverCacheStoreByKey(key, q.text, [q.correct], 'from_results', 'attempt_view');
-    });
+        serverCacheStoreByKey(key, q.text, [q.correct], 'from_results', 'attempt_view', correctTexts);
+    }
     await saveCache(cache);
     console.log(`${DEBUG_PREFIX} Cached ${added} new answers from AttemptView (${questions.length} total)`);
     return added;

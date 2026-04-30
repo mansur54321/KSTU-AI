@@ -11,7 +11,7 @@ const CONFIG = {
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.2'
+    VERSION: '3.4.3'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -303,6 +303,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             key: request.key,
             question_preview: request.question_preview,
             correct: request.correct,
+            correctTexts: request.correctTexts,
             reason: request.reason,
             source: request.source
         })
