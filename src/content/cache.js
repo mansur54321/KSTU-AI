@@ -10,23 +10,45 @@ async function sha256(value) {
     return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function hashQuestion(text, answers) {
+function imageToken(src) {
+    if (!src) return '';
+    try {
+        const url = new URL(src, location.href);
+        const name = url.pathname.split('/').pop() || url.pathname;
+        return normalizeCacheText(name);
+    } catch (e) {
+        return normalizeCacheText(src.split('/').pop() || src);
+    }
+}
+
+function collectImageTokens(images = []) {
+    return images.map(imageToken).filter(Boolean).sort().join('|');
+}
+
+function answerIdentity(answer) {
+    const text = normalizeCacheText(answer?.text);
+    const img = imageToken(answer?.imgSrc);
+    return text || img;
+}
+
+async function hashQuestion(text, answers, images = []) {
     const normalizedQuestion = normalizeCacheText(text);
-    const answerSet = answers.map(a => normalizeCacheText(a.text)).filter(Boolean).sort().join('|');
-    const hash = await sha256(`${normalizedQuestion}||${answerSet}`);
+    const questionImages = collectImageTokens(images);
+    const answerSet = answers.map(answerIdentity).filter(Boolean).sort().join('|');
+    const hash = await sha256(`${normalizedQuestion}||${questionImages}||${answerSet}`);
     return 'q_' + hash.slice(0, 32);
 }
 
 function correctIdsToAnswerTexts(answers, correctIds) {
     return correctIds
-        .map(id => answers.find(a => a.id === id)?.text)
+        .map(id => answerIdentity(answers.find(a => a.id === id)))
         .filter(Boolean)
         .map(normalizeCacheText);
 }
 
 function answerTextsToCurrentIds(answers, correctTexts) {
     const correctSet = new Set((correctTexts || []).map(normalizeCacheText));
-    return answers.filter(a => correctSet.has(normalizeCacheText(a.text))).map(a => a.id);
+    return answers.filter(a => correctSet.has(answerIdentity(a))).map(a => a.id);
 }
 
 function entryToCurrentAnswer(entry, answers) {
@@ -35,7 +57,7 @@ function entryToCurrentAnswer(entry, answers) {
         const currentIds = answerTextsToCurrentIds(answers, entry.correctTexts);
         if (currentIds.length) return { correct: currentIds, reason: entry.reason || 'cache', source: entry.source || 'cache' };
     }
-    return { correct: entry.correct || [], reason: entry.reason || 'cache', source: entry.source || 'cache' };
+    return null;
 }
 
 async function serverCacheLookupByKey(key) {
@@ -68,9 +90,9 @@ async function saveCache(cache) {
     await chrome.storage.local.set({ [ANSWER_CACHE_KEY]: cache });
 }
 
-async function cacheLookup(text, answers) {
+async function cacheLookup(text, answers, images = []) {
     if (!text || !answers?.length) return null;
-    const key = await hashQuestion(text, answers);
+    const key = await hashQuestion(text, answers, images);
 
     const serverEntry = await serverCacheLookupByKey(key);
     if (serverEntry?.correct?.length) {
@@ -94,9 +116,9 @@ async function cacheLookup(text, answers) {
     return entryToCurrentAnswer(entry, answers);
 }
 
-async function cacheStore(text, answers, correctIds, reason) {
+async function cacheStore(text, answers, correctIds, reason, images = []) {
     if (!text || !answers?.length || !correctIds?.length) return;
-    const key = await hashQuestion(text, answers);
+    const key = await hashQuestion(text, answers, images);
     const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
     const cache = await getCache();
     cache[key] = { correct: correctIds, correctTexts, reason: reason || '', ts: Date.now() };
@@ -104,14 +126,14 @@ async function cacheStore(text, answers, correctIds, reason) {
     await serverCacheStoreByKey(key, text, correctIds, reason, 'local', correctTexts);
 }
 
-async function cacheStoreFromResult(text, answers, result) {
+async function cacheStoreFromResult(text, answers, result, images = []) {
     if (!result) return;
     if (result.correct) {
-        await cacheStore(text, answers, result.correct, result.reason);
+        await cacheStore(text, answers, result.correct, result.reason, images);
     } else if (result.answer !== undefined) {
-        await cacheStore(text, answers, [String(result.answer)], result.reason);
+        await cacheStore(text, answers, [String(result.answer)], result.reason, images);
     } else if (result.pairs) {
-        await cacheStore(text, answers, result.pairs.map(p => `${p.zone}:${p.item}`), result.reason);
+        await cacheStore(text, answers, result.pairs.map(p => `${p.zone}:${p.item}`), result.reason, images);
     }
 }
 
@@ -125,13 +147,15 @@ function parseAttemptView() {
         if (!questionDiv || !answersTable) return;
 
         const questionText = questionDiv.innerText.trim();
+        const images = Array.from(questionDiv.querySelectorAll('img')).map(img => img.src).filter(Boolean);
         const answers = [];
         answersTable.querySelectorAll('tr').forEach(tr => {
             const cells = tr.querySelectorAll('td');
             if (cells.length >= 2) {
                 const id = cells[0].innerText.replace('.', '').trim();
                 const text = cells[1].innerText.trim();
-                if (id && text) answers.push({ id, text });
+                const imgSrc = cells[1].querySelector('img')?.src;
+                if (id && (text || imgSrc)) answers.push({ id, text, imgSrc });
             }
         });
 
@@ -145,7 +169,7 @@ function parseAttemptView() {
         });
 
         if (answers.length && correctAnswer) {
-            questions.push({ text: questionText, answers, correct: correctAnswer });
+            questions.push({ text: questionText, answers, images, correct: correctAnswer });
         }
     });
     return questions;
@@ -160,7 +184,7 @@ async function cacheFromAttemptView() {
     const cache = await getCache();
     let added = 0;
     for (const q of questions) {
-        const key = await hashQuestion(q.text, q.answers);
+        const key = await hashQuestion(q.text, q.answers, q.images);
         const correctTexts = correctIdsToAnswerTexts(q.answers, [q.correct]);
         if (!cache[key]) {
             cache[key] = { correct: [q.correct], correctTexts, reason: 'from_results', ts: Date.now() };

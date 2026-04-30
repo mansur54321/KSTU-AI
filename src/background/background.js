@@ -7,11 +7,12 @@ const CONFIG = {
     GITHUB_API: 'https://api.github.com/repos/',
     STATS_SERVER_URL: 'http://159.223.3.49:3000/api/log',
     CACHE_SERVER_URL: 'http://159.223.3.49:3000/api/cache',
+    CACHE_SIGNATURE_SECRET: 'kstu-ai-cache-v1',
     RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.3'
+    VERSION: '3.4.4'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -40,6 +41,29 @@ function errorMessage(error) {
 function stringifyErrorDetails(details) {
     try { return JSON.stringify(details); }
     catch (e) { return String(details); }
+}
+
+async function hmacSha256(message) {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(CONFIG.CACHE_SIGNATURE_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function cacheSignaturePayload(entry) {
+    return [
+        entry?.key || '',
+        JSON.stringify(entry?.correct || []),
+        JSON.stringify(entry?.correctTexts || []),
+        entry?.reason || '',
+        entry?.source || ''
+    ].join('|');
 }
 
 async function getUserId() {
@@ -142,10 +166,11 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
     for (const model of models) {
         for (let i = 0; i < apiKeys.length; i++) {
             const keyIndex = (currentKeyIndex + i) % apiKeys.length;
+            let timeoutId = null;
             try {
                 const controller = new AbortController();
                 const timeoutMs = model.includes('pro') ? 240000 : 120000;
-                const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
+                timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
                 const requestUrl = `${CONFIG.API_BASE_URL}${model}:generateContent?key=${maskApiKey(apiKeys[keyIndex])}`;
 
                 console.log('Trying model/key:', {
@@ -163,8 +188,6 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
                     body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
-                clearTimeout(timeoutId);
-
                 if (res.status === 429 || res.status === 503) {
                     rateLimitHit = true;
                     lastError = `HTTP ${res.status}: rate limit or server unavailable`;
@@ -192,6 +215,8 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
                 lastError = e;
                 attempts.push({ model, keyIndex, outcome: 'exception', error: errorMessage(e) });
                 console.warn('Model/key exception:', stringifyErrorDetails({ requestId, model, keyIndex, error: errorMessage(e) }));
+            } finally {
+                if (timeoutId) clearTimeout(timeoutId);
             }
         }
     }
@@ -231,7 +256,14 @@ async function serverCacheLookup(key) {
         body: JSON.stringify({ key })
     });
     if (!res.ok) return { hit: false, error: `HTTP ${res.status}` };
-    return res.json();
+    const data = await res.json();
+    if (!data.hit) return data;
+    const expected = await hmacSha256(cacheSignaturePayload(data.entry));
+    if (data.signature !== expected) {
+        console.warn(`${DEBUG_PREFIX} Cache signature mismatch`, { key });
+        return { hit: false, error: 'bad_signature' };
+    }
+    return data;
 }
 
 async function serverCacheStore(payload) {

@@ -551,7 +551,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
         let model = 'cache';
         let responseData = null;
 
-        const cached = await cacheLookup(q.text, q.answers);
+        const cached = await cacheLookup(q.text, q.answers, q.images || []);
         if (cached) {
             console.groupCollapsed(`${DEBUG_PREFIX} Cache hit ${requestId}`);
             logGroupOpen = true;
@@ -580,6 +580,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
             console.log('Answered by model:', { requestId, model, result });
             console.groupEnd();
             logGroupOpen = false;
+            await cacheStoreFromResult(q.text, q.answers, result, q.images || []);
         }
 
         if (q.domElement) q.domElement.style.opacity = '1';
