@@ -7,12 +7,21 @@ const CONFIG = {
     GITHUB_API: 'https://api.github.com/repos/',
     STATS_SERVER_URL: 'http://159.223.3.49:3000/api/log',
     CACHE_SERVER_URL: 'http://159.223.3.49:3000/api/cache',
-    CACHE_SIGNATURE_SECRET: 'kstu-ai-cache-v1',
+    CACHE_STORE_TOKEN: 'kstu-ai-cache-store-v1',
+    CACHE_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArpmnVIZdwHPHzOMear90
+miV7ouqm1pYaHCLUgOXdeqMGIKiXiA9n+y1e96NCXAYZzYbYj3KvwZBJdF2azUZt
+S8LtVsnfuUd9A6MMkgkalApKF8l9N8BIMGtwvsy5YdB36kHztEmeIEFCdMr6OVd9
+dosgI/aMV67UXlrTDEYjNY6hib0gW33fFoHo2KxoeTk5r/l6hN77nP5oBMHHxD17
+qoa9oxnCkWkX2Wig3hNapvjmIOXmmcny1fuKUFjQAgUU+HshcmieglpoZlEWxIS+
+d4dtJcr2ZSYPaxL7PV43h8sHjLFVwzMiK/CvjApCXDoW/z2zz1AxZoUsFJ4quZQn
+XQIDAQAB
+-----END PUBLIC KEY-----`,
     RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.4'
+    VERSION: '3.4.5'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -43,17 +52,22 @@ function stringifyErrorDetails(details) {
     catch (e) { return String(details); }
 }
 
-async function hmacSha256(message) {
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(CONFIG.CACHE_SIGNATURE_SECRET),
-        { name: 'HMAC', hash: 'SHA-256' },
+function base64ToArrayBuffer(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+}
+
+async function importCachePublicKey() {
+    const pem = CONFIG.CACHE_PUBLIC_KEY.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s/g, '');
+    return crypto.subtle.importKey(
+        'spki',
+        base64ToArrayBuffer(pem),
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
         false,
-        ['sign']
+        ['verify']
     );
-    const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function cacheSignaturePayload(entry) {
@@ -64,6 +78,17 @@ function cacheSignaturePayload(entry) {
         entry?.reason || '',
         entry?.source || ''
     ].join('|');
+}
+
+async function verifyCacheSignature(entry, signature) {
+    if (!signature) return false;
+    const key = await importCachePublicKey();
+    return crypto.subtle.verify(
+        'RSASSA-PKCS1-v1_5',
+        key,
+        base64ToArrayBuffer(signature),
+        new TextEncoder().encode(cacheSignaturePayload(entry))
+    );
 }
 
 async function getUserId() {
@@ -258,8 +283,7 @@ async function serverCacheLookup(key) {
     if (!res.ok) return { hit: false, error: `HTTP ${res.status}` };
     const data = await res.json();
     if (!data.hit) return data;
-    const expected = await hmacSha256(cacheSignaturePayload(data.entry));
-    if (data.signature !== expected) {
+    if (!await verifyCacheSignature(data.entry, data.signature)) {
         console.warn(`${DEBUG_PREFIX} Cache signature mismatch`, { key });
         return { hit: false, error: 'bad_signature' };
     }
@@ -269,7 +293,7 @@ async function serverCacheLookup(key) {
 async function serverCacheStore(payload) {
     const res = await fetch(`${CONFIG.CACHE_SERVER_URL}/store`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Cache-Token': CONFIG.CACHE_STORE_TOKEN },
         body: JSON.stringify(payload)
     });
     if (!res.ok) return { status: 'error', error: `HTTP ${res.status}` };

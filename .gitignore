@@ -16,3 +16,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Release archives
+KSTU-AI-v*.zip
+KSTU-AI.zip

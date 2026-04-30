@@ -831,6 +831,8 @@ async function init() {
     unlockSite();
     await autoExtractApiKey();
 
+    if (window.top !== window) return;
+
     if (location.pathname.includes('AttemptView') || location.pathname.includes('AttemptResult')) {
         cacheFromAttemptView();
         scheduleAttemptViewOpen();

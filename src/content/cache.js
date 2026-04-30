@@ -28,7 +28,7 @@ function collectImageTokens(images = []) {
 function answerIdentity(answer) {
     const text = normalizeCacheText(answer?.text);
     const img = imageToken(answer?.imgSrc);
-    return text || img;
+    return `${text}::img=${img}`;
 }
 
 async function hashQuestion(text, answers, images = []) {
@@ -81,6 +81,16 @@ async function serverCacheStoreByKey(key, text, correctIds, reason, source = 'cl
     });
 }
 
+async function localCacheStore(text, answers, correctIds, reason, images = []) {
+    if (!text || !answers?.length || !correctIds?.length) return;
+    const key = await hashQuestion(text, answers, images);
+    const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
+    if (!correctTexts.length) return;
+    const cache = await getCache();
+    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', source: 'local', ts: Date.now() };
+    await saveCache(cache);
+}
+
 async function getCache() {
     const data = await chrome.storage.local.get([ANSWER_CACHE_KEY]);
     return data[ANSWER_CACHE_KEY] || {};
@@ -120,20 +130,21 @@ async function cacheStore(text, answers, correctIds, reason, images = []) {
     if (!text || !answers?.length || !correctIds?.length) return;
     const key = await hashQuestion(text, answers, images);
     const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
+    if (!correctTexts.length) return;
     const cache = await getCache();
-    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', ts: Date.now() };
+    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', source: 'trusted', ts: Date.now() };
     await saveCache(cache);
-    await serverCacheStoreByKey(key, text, correctIds, reason, 'local', correctTexts);
+    await serverCacheStoreByKey(key, text, correctIds, reason, 'attempt_view', correctTexts);
 }
 
 async function cacheStoreFromResult(text, answers, result, images = []) {
     if (!result) return;
     if (result.correct) {
-        await cacheStore(text, answers, result.correct, result.reason, images);
+        await localCacheStore(text, answers, result.correct, result.reason, images);
     } else if (result.answer !== undefined) {
-        await cacheStore(text, answers, [String(result.answer)], result.reason, images);
+        await localCacheStore(text, answers, [String(result.answer)], result.reason, images);
     } else if (result.pairs) {
-        await cacheStore(text, answers, result.pairs.map(p => `${p.zone}:${p.item}`), result.reason, images);
+        await localCacheStore(text, answers, result.pairs.map(p => `${p.zone}:${p.item}`), result.reason, images);
     }
 }
 
@@ -143,7 +154,6 @@ function parseAttemptView() {
     rows.forEach(row => {
         const questionDiv = row.querySelector('.question');
         const answersTable = row.querySelector('.answersTable');
-        const correctEl = row.querySelector('span.val');
         if (!questionDiv || !answersTable) return;
 
         const questionText = questionDiv.innerText.trim();
