@@ -387,6 +387,12 @@ function extractQuestions() {
 
 async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+function isQuestionAnswered(q) {
+    if (q.type === 'text_input') return !!q.inputElement?.value?.trim();
+    if (q.type === 'choice') return q.answers?.some(ans => ans.element?.checked) || false;
+    return false;
+}
+
 async function typeAnswer(el, text) {
     el.focus();
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -553,6 +559,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
 
         const cached = await cacheLookup(q.text, q.answers, q.images || []);
         if (cached) {
+            q.cacheHit = true;
             console.groupCollapsed(`${DEBUG_PREFIX} Cache hit ${requestId}`);
             logGroupOpen = true;
             console.log('Question:', { requestId, platform: q.platform, type: q.type, number: q.number, cacheHit: true });
@@ -676,24 +683,32 @@ async function start() {
         return { total: 0, solved: 0, failed: 0 };
     }
 
+    const pendingQs = qs.filter(q => !isQuestionAnswered(q));
+    const alreadyAnswered = qs.length - pendingQs.length;
+    if (!pendingQs.length) {
+        showStealthNotify('Уже отвечено', 'success', 900);
+        hideStatus();
+        return { total: qs.length, solved: qs.length, failed: 0, alreadyAnswered: true, allCached: false };
+    }
+
     if (isFastMode) {
         if (isProcessingBatch) {
             console.warn(`${DEBUG_PREFIX} Batch already in progress`);
-            return { total: qs.length, solved: 0, failed: qs.length };
+            return { total: qs.length, solved: alreadyAnswered, failed: pendingQs.length };
         }
         isProcessingBatch = true;
-        console.log(`${DEBUG_PREFIX} Parallel mode: sending ${qs.length} requests simultaneously`);
+        console.log(`${DEBUG_PREFIX} Parallel mode: sending ${pendingQs.length} requests simultaneously`);
 
         let solvedFlags = [];
         try {
             solvedFlags = await Promise.all(
-                qs.map((q, i) => {
-                    showStatus(`${i + 1}/${qs.length}`, 'default');
+                pendingQs.map((q, i) => {
+                    showStatus(`${alreadyAnswered + i + 1}/${qs.length}`, 'default');
                     return processQuestion(q, keys, models, true);
                 })
             );
 
-            const failedQs = qs.filter((q, i) => !solvedFlags[i]);
+            const failedQs = pendingQs.filter((q, i) => !solvedFlags[i]);
             if (failedQs.length) {
                 console.warn(`${DEBUG_PREFIX} Retrying failed questions`, failedQs.map(q => q.number));
                 showStealthNotify(`Повтор ошибок: ${failedQs.length}`, 'warning', 2000);
@@ -706,21 +721,21 @@ async function start() {
             isProcessingBatch = false;
         }
 
-        const solved = solvedFlags.filter(Boolean).length;
+        const solved = alreadyAnswered + solvedFlags.filter(Boolean).length;
         const failed = qs.length - solved;
         showStatus(`${solved}/${qs.length}`, failed === 0 ? 'green' : 'orange');
         showStealthNotify(`${I18N.t('notify.allSolved')}: ${solved}/${qs.length}` + (failed ? ` (${failed} ошибок, страница остановлена)` : ''), failed === 0 ? 'success' : 'error');
         hideStatus();
-        return { total: qs.length, solved, failed };
+        return { total: qs.length, solved, failed, alreadyAnswered: false, allCached: pendingQs.every(q => q.cacheHit) };
     } else {
-        let solved = 0;
-        for (let i = 0; i < qs.length; i++) {
+        let solved = alreadyAnswered;
+        for (let i = 0; i < pendingQs.length; i++) {
             if (qs.length > 1) showStatus(`${i + 1}/${qs.length}`, 'default');
-            if (await processQuestion(qs[i], keys, models, false)) solved++;
+            if (await processQuestion(pendingQs[i], keys, models, false)) solved++;
         }
         if (qs.length > 1) showStealthNotify(`${I18N.t('notify.allSolved')}: ${qs.length}`, 'success');
         hideStatus();
-        return { total: qs.length, solved, failed: qs.length - solved };
+        return { total: qs.length, solved, failed: qs.length - solved, alreadyAnswered: false, allCached: pendingQs.every(q => q.cacheHit) };
     }
 }
 
@@ -804,19 +819,20 @@ async function solveAndNext() {
         return;
     }
 
+    const fastTransition = summary?.alreadyAnswered || summary?.allCached;
     const nextBtn = getNextPageButton();
     if (nextBtn) {
         console.log(`${DEBUG_PREFIX} solveAndNext: clicking next page button`, { value: nextBtn.value });
         await chrome.storage.local.set({ autoSolvePending: true });
-        showStealthNotify('Следующая страница...', 'info', 1500);
-        await sleep(1500);
+        showStealthNotify('Следующая страница...', 'info', fastTransition ? 500 : 1500);
+        await sleep(fastTransition ? 100 : 1500);
         nextBtn.click();
     } else {
         const finishBtn = getFinishButton();
         if (finishBtn) {
             console.log(`${DEBUG_PREFIX} solveAndNext: no next page, finishing test`);
-            showStealthNotify('Последняя страница, завершаю...', 'info', 2000);
-            await sleep(2000);
+            showStealthNotify('Последняя страница, завершаю...', 'info', fastTransition ? 500 : 2000);
+            await sleep(fastTransition ? 100 : 2000);
             await finishTest();
         } else {
             console.log(`${DEBUG_PREFIX} solveAndNext: no next page and no finish button`);
@@ -851,17 +867,18 @@ async function init() {
             return;
         }
 
+        const fastTransition = summary?.alreadyAnswered || summary?.allCached;
         const nextBtn = getNextPageButton();
         if (nextBtn) {
             await chrome.storage.local.set({ autoSolvePending: true });
-            showStealthNotify('Следующая страница...', 'info', 1500);
-            await sleep(1500);
+            showStealthNotify('Следующая страница...', 'info', fastTransition ? 500 : 1500);
+            await sleep(fastTransition ? 100 : 1500);
             nextBtn.click();
         } else {
             const finishBtn = getFinishButton();
             if (finishBtn) {
-                showStealthNotify('Последняя страница, завершаю...', 'info', 2000);
-                await sleep(2000);
+                showStealthNotify('Последняя страница, завершаю...', 'info', fastTransition ? 500 : 2000);
+                await sleep(fastTransition ? 100 : 2000);
                 await finishTest();
             } else {
                 showStealthNotify('Авто-решение завершено', 'success');

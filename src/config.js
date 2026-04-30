@@ -21,7 +21,7 @@ const CONFIG = {
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.6'
+    VERSION: '3.4.7'
 };
 
 if (typeof module !== 'undefined' && module.exports) {
