@@ -8,8 +8,8 @@ const DEBUG_PREFIX = '[KSTU-AI]';
 function getModels(pro) {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_models', pro }, (resp) => {
-            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models: resp || ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'] });
-            resolve(resp || ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview']);
+            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models: resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'] });
+            resolve(resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview']);
         });
     });
 }
@@ -17,7 +17,7 @@ function getModels(pro) {
 function getFallbackModels() {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_fallback_models' }, (resp) => {
-            resolve(resp || ['gemini-3-flash-preview']);
+            resolve(resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview']);
         });
     });
 }

@@ -1,7 +1,7 @@
 const CONFIG = {
-    MODELS: ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
+    MODELS: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'],
     MODELS_PRO: ['gemini-3.1-pro-preview'],
-    MODELS_PRO_FALLBACK: ['gemini-3-flash-preview'],
+    MODELS_PRO_FALLBACK: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'],
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
     GITHUB_REPO: 'mansur54321/KSTU-AI',
     GITHUB_API: 'https://api.github.com/repos/',
@@ -21,7 +21,7 @@ XQIDAQAB
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
     API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.5'
+    VERSION: '3.4.8'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -261,7 +261,7 @@ async function validateApiKey(key) {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${CONFIG.API_BASE_URL}gemini-3-flash-preview:generateContent?key=${key}`, {
+        const res = await fetch(`${CONFIG.API_BASE_URL}gemini-3.5-flash:generateContent?key=${key}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] }),
@@ -338,9 +338,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'get_models') {
-        const selectedModels = request.pro ? CONFIG.MODELS_PRO : CONFIG.MODELS;
-        console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
-        sendResponse(selectedModels);
+        chrome.storage.sync.get(['cfgProUseFlash', 'cfgProFlashPriority'], (storage) => {
+            let selectedModels = request.pro ? [...CONFIG.MODELS_PRO] : [...CONFIG.MODELS];
+            if (request.pro) {
+                const useFlash = storage.cfgProUseFlash === true;
+                const flashPriority = storage.cfgProFlashPriority === true;
+                if (useFlash) {
+                    if (flashPriority) {
+                        selectedModels.unshift('gemini-3.5-flash');
+                    } else {
+                        selectedModels.push('gemini-3.5-flash');
+                    }
+                }
+            }
+            console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
+            sendResponse(selectedModels);
+        });
+        return true;
     }
 
     if (request.action === 'get_fallback_models') {
