@@ -138,6 +138,9 @@ textarea {
     outline: none; 
     font-family: monospace; 
     font-size: 11px; 
+    white-space: pre;
+    overflow: auto;
+    word-break: normal;
 }
 textarea:focus { border-color: #67b279; }
 

@@ -35,9 +35,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const checkUpdateBtn = document.getElementById('check-update');
     const updateStatusText = document.getElementById('update-status-text');
     const updateStatus = document.getElementById('update-status');
+    const API_KEY_REGEX = /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/;
+    let keysInputRaw = '';
 
     function parseApiKeys(text) {
-        return text.split('\n').map(k => k.trim()).filter(k => /^AIzaSy[A-Za-z0-9_-]{30,}$/.test(k));
+        return text
+            .split(/[\s,;]+/)
+            .map(k => k.trim())
+            .filter(k => API_KEY_REGEX.test(k));
+    }
+
+    function normalizeKeyLines(text) {
+        return text
+            .split(/[\s,;]+/)
+            .map(k => k.trim())
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    function maskApiKey(key) {
+        if (!key) return '';
+        return key.slice(0, 5) + '************';
+    }
+
+    function renderKeysInput(masked = document.activeElement !== keysInput) {
+        keysInput.value = masked
+            ? parseApiKeys(keysInputRaw).map(maskApiKey).join('\n')
+            : keysInputRaw;
     }
 
     const data = await chrome.storage.sync.get([
@@ -60,7 +84,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateMasterUI(isEnabled);
     solveCountEl.innerText = solvedCount;
-    keysInput.value = apiKeys.join('\n');
+    keysInputRaw = apiKeys.join('\n');
+    renderKeysInput(true);
     updateKeyMeter(apiKeys.length);
     cfgAutoClick.checked = autoClick;
     cfgMarker.checked = marker;
@@ -158,17 +183,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     keysInput.addEventListener('input', () => {
-        const count = parseApiKeys(keysInput.value).length;
+        const normalized = normalizeKeyLines(keysInput.value);
+        keysInputRaw = normalized;
+        if (normalized !== keysInput.value) {
+            keysInput.value = normalized;
+        }
+        const count = parseApiKeys(keysInputRaw).length;
         updateKeyMeter(count);
     });
 
+    keysInput.addEventListener('focus', () => {
+        renderKeysInput(false);
+        keysInput.select();
+    });
+
+    keysInput.addEventListener('blur', () => {
+        keysInputRaw = normalizeKeyLines(keysInput.value);
+        renderKeysInput(true);
+    });
+
     saveKeysBtn.addEventListener('click', () => {
-        const keys = parseApiKeys(keysInput.value);
+        keysInputRaw = normalizeKeyLines(document.activeElement === keysInput ? keysInput.value : keysInputRaw);
+        const keys = parseApiKeys(keysInputRaw);
         chrome.storage.sync.set({ geminiApiKeys: keys }, () => {
             statusMsg.innerText = `Сохранено ${keys.length} ключей`;
             statusMsg.style.color = '#67b279';
             setTimeout(() => statusMsg.innerText = '', 2000);
             updateKeyMeter(keys.length);
+            keysInputRaw = keys.join('\n');
+            renderKeysInput(true);
         });
     });
 
@@ -179,7 +222,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     checkKeysBtn.addEventListener('click', async () => {
-        const keys = parseApiKeys(keysInput.value);
+        keysInputRaw = normalizeKeyLines(document.activeElement === keysInput ? keysInput.value : keysInputRaw);
+        const keys = parseApiKeys(keysInputRaw);
         if (keys.length === 0) return;
 
         checkResults.innerHTML = '<div style="text-align:center; color:#888;">Проверка...</div>';
@@ -190,7 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let validCount = 0;
 
         for (const key of keys) {
-            const mask = key.substring(0, 4) + '***' + key.substring(key.length - 3);
+            const mask = maskApiKey(key);
             try {
                 const valid = await new Promise((resolve) => {
                     chrome.runtime.sendMessage({ action: 'validate_key', key }, (resp) => {
@@ -235,7 +279,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const importData = JSON.parse(text);
             if (typeof importData !== 'object') throw new Error('Invalid format');
             await chrome.storage.sync.set(importData);
-            if (importData.geminiApiKeys) { keysInput.value = importData.geminiApiKeys.join('\n'); updateKeyMeter(importData.geminiApiKeys.length); }
+            if (importData.geminiApiKeys) {
+                keysInputRaw = importData.geminiApiKeys.join('\n');
+                renderKeysInput(true);
+                updateKeyMeter(importData.geminiApiKeys.length);
+            }
             if (importData.cfgAutoClick !== undefined) cfgAutoClick.checked = importData.cfgAutoClick;
             if (importData.cfgMarker !== undefined) cfgMarker.checked = importData.cfgMarker;
             if (importData.language) cfgLanguage.value = importData.language;

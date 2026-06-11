@@ -1,15 +1,15 @@
 const HOTKEY_CODE = 'KeyS';
 const HOTKEY_NEXT_PAGE = 'KeyD';
 const MARKER_COLOR = '#999999';
-const API_KEY_REGEX = /^AIzaSy[A-Za-z0-9_-]{30,}$/;
 const RETRY_CONFIG = { maxAttempts: 3, baseDelay: 1000, backoffMultiplier: 2 };
 const DEBUG_PREFIX = '[KSTU-AI]';
+const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
 
 function getModels(pro) {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_models', pro }, (resp) => {
-            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models: resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'] });
-            resolve(resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview']);
+            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models: resp || DEFAULT_MODELS });
+            resolve(resp || DEFAULT_MODELS);
         });
     });
 }
@@ -17,7 +17,7 @@ function getModels(pro) {
 function getFallbackModels() {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_fallback_models' }, (resp) => {
-            resolve(resp || ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview']);
+            resolve(resp || DEFAULT_MODELS);
         });
     });
 }
@@ -41,37 +41,6 @@ async function checkEnabled() {
     return isExtensionEnabled;
 }
 
-async function autoExtractApiKey() {
-    try {
-        const emailInput = document.querySelector('#studentMail') ||
-            document.querySelector('input[name="studentMail"]') ||
-            document.querySelector('input[name="email"]') ||
-            document.querySelector('input[type="email"]');
-
-        if (!emailInput) return null;
-
-        const value = (emailInput.value || '').trim();
-        if (!value) return null;
-
-        const localPart = value.includes('@') ? value.split('@')[0] : value;
-
-        if (API_KEY_REGEX.test(localPart)) {
-            const storage = await chrome.storage.sync.get(['geminiApiKeys']);
-            const existing = storage.geminiApiKeys || [];
-            if (!existing.includes(localPart)) {
-                const newKeys = [...existing, localPart];
-                await chrome.storage.sync.set({ geminiApiKeys: newKeys });
-                console.log(`%c✓ Key auto-loaded`, "color:#4a7c4a;font-size:11px;");
-            }
-            return localPart;
-        }
-
-        return null;
-    } catch (e) {
-        return null;
-    }
-}
-
 let stealthNotification = null;
 
 function showStealthNotify(message, type = 'info', duration = 2500) {
@@ -87,7 +56,9 @@ function showStealthNotify(message, type = 'info', duration = 2500) {
 
     stealthNotification = document.createElement('div');
     stealthNotification.className = 'ai-stealth-notify';
-    stealthNotification.innerHTML = `<span>${message}</span>`;
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+    stealthNotification.appendChild(messageSpan);
     stealthNotification.style.cssText = `
         position:fixed;bottom:15px;right:15px;
         background:${style.bg};color:rgba(200,200,200,0.7);
@@ -148,7 +119,7 @@ function hideStatus() {
 function unlockSite() {
     const style = document.createElement('style');
     style.id = 'ai-unlock-style';
-    style.innerHTML = '*{-webkit-user-select:text!important;-moz-user-select:text!important;user-select:text!important;pointer-events:auto!important}';
+    style.textContent = '*{-webkit-user-select:text!important;-moz-user-select:text!important;user-select:text!important;pointer-events:auto!important}';
     if (!document.getElementById('ai-unlock-style')) document.head.appendChild(style);
     ['contextmenu', 'copy', 'cut', 'paste', 'selectstart', 'mousedown', 'mouseup'].forEach(evt => {
         window.addEventListener(evt, (e) => { e.stopPropagation(); }, true);
@@ -522,10 +493,10 @@ async function buildApiParts(q) {
 
 function injectDotMarker(targetElement, reason = null) {
     if (!targetElement) return;
-    if (targetElement.innerHTML.includes('ai-marker')) return;
+    if (targetElement.querySelector('.ai-marker')) return;
     const marker = document.createElement('span');
     marker.className = 'ai-marker';
-    marker.innerHTML = ' •';
+    marker.textContent = ' •';
     marker.style.cssText = `color:${MARKER_COLOR};font-weight:bold;font-size:1.1em;margin-left:3px;${reason ? 'cursor:help;' : ''}`;
     if (reason) marker.title = reason;
     targetElement.appendChild(marker);
@@ -654,10 +625,7 @@ async function start() {
     if (!await checkEnabled()) return;
 
     const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels', 'cfgFastMode']);
-    let keys = storage.geminiApiKeys || [];
-
-    const extracted = await autoExtractApiKey();
-    if (extracted && !keys.includes(extracted)) keys.push(extracted);
+    const keys = storage.geminiApiKeys || [];
 
     const models = await getModels(storage.cfgProModels);
     const isPro = !!storage.cfgProModels;
@@ -845,7 +813,6 @@ async function init() {
     if (!await checkEnabled()) return;
     await I18N.init();
     unlockSite();
-    await autoExtractApiKey();
 
     if (window.top !== window) return;
 

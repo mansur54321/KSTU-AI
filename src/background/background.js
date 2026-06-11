@@ -1,7 +1,7 @@
 const CONFIG = {
-    MODELS: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'],
+    MODELS: ['gemini-3.5-flash', 'gemini-3.1-flash-lite'],
     MODELS_PRO: ['gemini-3.1-pro-preview'],
-    MODELS_PRO_FALLBACK: ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview'],
+    MODELS_PRO_FALLBACK: ['gemini-3.5-flash', 'gemini-3.1-flash-lite'],
     API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
     GITHUB_REPO: 'mansur54321/KSTU-AI',
     GITHUB_API: 'https://api.github.com/repos/',
@@ -20,8 +20,8 @@ XQIDAQAB
     RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
     HOTKEY_CODE: 'KeyS',
     MARKER_COLOR: '#888888',
-    API_KEY_REGEX: /^AIzaSy[A-Za-z0-9_-]{30,}$/,
-    VERSION: '3.4.8'
+    API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/,
+    VERSION: '3.4.9'
 };
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
@@ -50,6 +50,31 @@ function errorMessage(error) {
 function stringifyErrorDetails(details) {
     try { return JSON.stringify(details); }
     catch (e) { return String(details); }
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function extractGeminiJson(data) {
+    const candidate = data?.candidates?.[0];
+    const resultText = candidate?.content?.parts
+        ?.map(part => part.text || '')
+        .join('')
+        .replace(/```json|```/g, '')
+        .trim();
+
+    if (!resultText) {
+        throw new Error(`Empty Gemini response: ${candidate?.finishReason || 'no candidate'}`);
+    }
+
+    return { text: resultText, json: JSON.parse(resultText) };
 }
 
 function base64ToArrayBuffer(base64) {
@@ -102,14 +127,14 @@ async function getUserId() {
 async function sendLog(type, model, meta = {}) {
     try {
         const userId = await getUserId();
-        fetch(CONFIG.STATS_SERVER_URL, {
+        fetchWithTimeout(CONFIG.STATS_SERVER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 user_id: userId, event_type: type, model: model,
                 timestamp: new Date().toISOString(), meta: meta
             })
-        }).catch(() => { });
+        }, 3000).catch(() => { });
 
         if (type === 'solve_success') {
             const data = await chrome.storage.sync.get(['solvedCount']);
@@ -127,13 +152,9 @@ async function sendLog(type, model, meta = {}) {
 
 async function checkForUpdates() {
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(GITHUB_API_URL, {
-            headers: { 'Accept': 'application/vnd.github.v3+json' },
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+        const response = await fetchWithTimeout(GITHUB_API_URL, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        }, 10000);
 
         if (response.status === 404) {
             const info = { hasUpdate: false, currentVersion: chrome.runtime.getManifest().version, checkedAt: Date.now() };
@@ -229,8 +250,7 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
 
                 const data = await res.json();
                 await chrome.storage.sync.set({ currentKeyIndex: keyIndex });
-                const resultText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-                const json = JSON.parse(resultText);
+                const { text: resultText, json } = extractGeminiJson(data);
                 attempts.push({ model, keyIndex, status: res.status, outcome: 'success' });
                 console.log('Model answered:', { requestId, model, keyIndex, responseChars: resultText.length, result: json });
                 console.groupEnd();
@@ -259,15 +279,11 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
 async function validateApiKey(key) {
     if (!CONFIG.API_KEY_REGEX.test(key)) return false;
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${CONFIG.API_BASE_URL}gemini-3.5-flash:generateContent?key=${key}`, {
+        const res = await fetchWithTimeout(`${CONFIG.API_BASE_URL}gemini-3.5-flash:generateContent?key=${key}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] }),
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+            body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
+        }, 10000);
         return res.ok;
     } catch (e) {
         return false;
@@ -275,11 +291,11 @@ async function validateApiKey(key) {
 }
 
 async function serverCacheLookup(key) {
-    const res = await fetch(`${CONFIG.CACHE_SERVER_URL}/lookup`, {
+    const res = await fetchWithTimeout(`${CONFIG.CACHE_SERVER_URL}/lookup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key })
-    });
+    }, 5000);
     if (!res.ok) return { hit: false, error: `HTTP ${res.status}` };
     const data = await res.json();
     if (!data.hit) return data;
@@ -291,11 +307,11 @@ async function serverCacheLookup(key) {
 }
 
 async function serverCacheStore(payload) {
-    const res = await fetch(`${CONFIG.CACHE_SERVER_URL}/store`, {
+    const res = await fetchWithTimeout(`${CONFIG.CACHE_SERVER_URL}/store`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Cache-Token': CONFIG.CACHE_STORE_TOKEN },
         body: JSON.stringify(payload)
-    });
+    }, 5000);
     if (!res.ok) return { status: 'error', error: `HTTP ${res.status}` };
     return res.json();
 }
