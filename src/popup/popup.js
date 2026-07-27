@@ -22,10 +22,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cfgProModels = document.getElementById('cfg-pro-models');
     const cfgFastMode = document.getElementById('cfg-fast-mode');
     const cfgFastModeRow = document.getElementById('cfg-fast-mode-row');
-    const cfgProUseFlash = document.getElementById('cfg-pro-use-flash');
-    const cfgProUseFlashRow = document.getElementById('cfg-pro-use-flash-row');
-    const cfgProFlashPriority = document.getElementById('cfg-pro-flash-priority');
-    const cfgProFlashPriorityRow = document.getElementById('cfg-pro-flash-priority-row');
+    const cfgProLegacy = document.getElementById('cfg-pro-legacy');
+    const cfgProLegacyRow = document.getElementById('cfg-pro-legacy-row');
     const exportBtn = document.getElementById('export-settings');
     const importBtn = document.getElementById('import-settings');
     const importFile = document.getElementById('import-file');
@@ -35,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const checkUpdateBtn = document.getElementById('check-update');
     const updateStatusText = document.getElementById('update-status-text');
     const updateStatus = document.getElementById('update-status');
-    const API_KEY_REGEX = /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/;
+    const API_KEY_REGEX = globalThis.KSTU_AI_CONFIG.CONFIG.API_KEY_REGEX;
     let keysInputRaw = '';
 
     function parseApiKeys(text) {
@@ -67,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const data = await chrome.storage.sync.get([
         'isEnabled', 'solvedCount', 'geminiApiKeys',
         'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels', 'cfgFastMode',
-        'cfgProUseFlash', 'cfgProFlashPriority'
+        'cfgProLegacy'
     ]);
 
     let isEnabled = data.isEnabled !== false;
@@ -79,8 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let rateLimitHits = data.rateLimitHits || 0;
     let proModels = data.cfgProModels || false;
     let fastMode = data.cfgFastMode || false;
-    let proUseFlash = data.cfgProUseFlash || false;
-    let proFlashPriority = data.cfgProFlashPriority || false;
+    let proLegacy = data.cfgProLegacy === true;
 
     updateMasterUI(isEnabled);
     solveCountEl.innerText = solvedCount;
@@ -92,8 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgLanguage.value = language;
     cfgProModels.checked = proModels;
     cfgFastMode.checked = fastMode && proModels;
-    cfgProUseFlash.checked = proUseFlash && proModels;
-    cfgProFlashPriority.checked = proFlashPriority && proUseFlash && proModels;
+    cfgProLegacy.checked = proLegacy && proModels;
     updateProSubOptionsVisibility(proModels);
     versionText.innerText = 'v' + chrome.runtime.getManifest().version;
     rateLimitText.innerText = `Лимитов: ${rateLimitHits}`;
@@ -132,16 +128,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         cfgFastMode.disabled = !proEnabled;
         if (!proEnabled) cfgFastMode.checked = false;
 
-        // Pro Use Flash
-        cfgProUseFlashRow.style.display = proEnabled ? 'flex' : 'none';
-        cfgProUseFlash.disabled = !proEnabled;
-        if (!proEnabled) cfgProUseFlash.checked = false;
-
-        // Pro Flash Priority
-        const showPriority = proEnabled && cfgProUseFlash.checked;
-        cfgProFlashPriorityRow.style.display = showPriority ? 'flex' : 'none';
-        cfgProFlashPriority.disabled = !showPriority;
-        if (!showPriority) cfgProFlashPriority.checked = false;
+        // Legacy Pro model
+        cfgProLegacyRow.style.display = proEnabled ? 'flex' : 'none';
+        cfgProLegacy.disabled = !proEnabled;
+        if (!proEnabled) cfgProLegacy.checked = false;
     }
 
     openSettingsBtn.addEventListener('click', () => {
@@ -163,22 +153,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.sync.set({ 
             cfgProModels: enabled, 
             cfgFastMode: enabled ? cfgFastMode.checked : false,
-            cfgProUseFlash: enabled ? cfgProUseFlash.checked : false,
-            cfgProFlashPriority: (enabled && cfgProUseFlash.checked) ? cfgProFlashPriority.checked : false
+            cfgProLegacy: enabled ? cfgProLegacy.checked : false
         });
     });
     cfgFastMode.addEventListener('change', (e) => chrome.storage.sync.set({ cfgFastMode: e.target.checked && cfgProModels.checked }));
-    cfgProUseFlash.addEventListener('change', (e) => {
+    cfgProLegacy.addEventListener('change', (e) => {
         const enabled = e.target.checked && cfgProModels.checked;
         updateProSubOptionsVisibility(cfgProModels.checked);
-        chrome.storage.sync.set({ 
-            cfgProUseFlash: enabled, 
-            cfgProFlashPriority: enabled ? cfgProFlashPriority.checked : false 
-        });
-    });
-    cfgProFlashPriority.addEventListener('change', (e) => {
-        chrome.storage.sync.set({ 
-            cfgProFlashPriority: e.target.checked && cfgProUseFlash.checked && cfgProModels.checked 
+        chrome.storage.sync.set({
+            cfgProLegacy: enabled
         });
     });
 
@@ -289,8 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (importData.language) cfgLanguage.value = importData.language;
             if (importData.cfgProModels !== undefined) cfgProModels.checked = importData.cfgProModels;
             if (importData.cfgFastMode !== undefined) cfgFastMode.checked = importData.cfgFastMode && cfgProModels.checked;
-            if (importData.cfgProUseFlash !== undefined) cfgProUseFlash.checked = importData.cfgProUseFlash && cfgProModels.checked;
-            if (importData.cfgProFlashPriority !== undefined) cfgProFlashPriority.checked = importData.cfgProFlashPriority && cfgProUseFlash.checked && cfgProModels.checked;
+            if (importData.cfgProLegacy !== undefined) cfgProLegacy.checked = importData.cfgProLegacy && cfgProModels.checked;
             updateProSubOptionsVisibility(cfgProModels.checked);
             statusMsg.innerText = 'Импортировано!';
             statusMsg.style.color = '#67b279';

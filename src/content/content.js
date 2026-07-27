@@ -3,13 +3,14 @@ const HOTKEY_NEXT_PAGE = 'KeyD';
 const MARKER_COLOR = '#999999';
 const RETRY_CONFIG = { maxAttempts: 3, baseDelay: 1000, backoffMultiplier: 2 };
 const DEBUG_PREFIX = '[KSTU-AI]';
-const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+const MODEL_POLICY = globalThis.KSTU_AI_CONFIG;
 
 function getModels(pro) {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_models', pro }, (resp) => {
-            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models: resp || DEFAULT_MODELS });
-            resolve(resp || DEFAULT_MODELS);
+            const models = resp || MODEL_POLICY.selectModels({ pro: !!pro });
+            console.log(`${DEBUG_PREFIX} Models loaded`, { pro: !!pro, models });
+            resolve(models);
         });
     });
 }
@@ -17,7 +18,7 @@ function getModels(pro) {
 function getFallbackModels() {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'get_fallback_models' }, (resp) => {
-            resolve(resp || DEFAULT_MODELS);
+            resolve(resp || MODEL_POLICY.getFallbackModels());
         });
     });
 }

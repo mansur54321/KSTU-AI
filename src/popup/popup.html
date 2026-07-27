@@ -83,7 +83,7 @@
       </div>
 
       <div class="setting-row">
-        <span><i class="fas fa-crown"></i> Pro модели</span>
+        <span><i class="fas fa-crown"></i> Pro ключ</span>
         <label class="toggle-switch">
           <input type="checkbox" id="cfg-pro-models">
           <span class="slider"></span>
@@ -98,18 +98,10 @@
         </label>
       </div>
 
-      <div class="setting-row" id="cfg-pro-use-flash-row" style="display: none;">
-        <span><i class="fas fa-check-circle"></i> Использовать 3.5 Flash в Pro</span>
+      <div class="setting-row" id="cfg-pro-legacy-row" style="display: none;">
+        <span><i class="fas fa-clock-rotate-left"></i> 3.1 Pro <small class="legacy-badge">LEGACY</small></span>
         <label class="toggle-switch">
-          <input type="checkbox" id="cfg-pro-use-flash">
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div class="setting-row" id="cfg-pro-flash-priority-row" style="display: none;">
-        <span><i class="fas fa-star"></i> Приоритет 3.5 Flash в Pro</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="cfg-pro-flash-priority">
+          <input type="checkbox" id="cfg-pro-legacy">
           <span class="slider"></span>
         </label>
       </div>
@@ -164,6 +156,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

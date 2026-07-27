@@ -191,6 +191,17 @@ textarea:focus { border-color: #67b279; }
     border-radius: 6px; 
 }
 .setting-row i { color: #888; margin-right: 8px; width: 16px; text-align: center; }
+.legacy-badge {
+    margin-left: 5px;
+    padding: 1px 4px;
+    border: 1px solid #7a6433;
+    border-radius: 3px;
+    color: #d7ae55;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0;
+    vertical-align: 1px;
+}
 
 .toggle-switch { position: relative; width: 40px; height: 20px; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }

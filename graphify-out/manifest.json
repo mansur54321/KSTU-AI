@@ -1,0 +1,87 @@
+{
+  "manifest.json": {
+    "mtime": 1785156943.715082,
+    "ast_hash": "c4730e74e59756244445e070c46322a2",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1785155925.3284552,
+    "ast_hash": "573295031761f513b48ccaf3b17bf50c",
+    "semantic_hash": ""
+  },
+  "src/background/background.js": {
+    "mtime": 1785156829.7817829,
+    "ast_hash": "1b2e0d3f47470d1f35b9be612ff9fec2",
+    "semantic_hash": ""
+  },
+  "src/config.js": {
+    "mtime": 1785156943.8240821,
+    "ast_hash": "12d1371f1968066d1adcd8650668cc5d",
+    "semantic_hash": ""
+  },
+  "src/content/cache.js": {
+    "mtime": 1779799118.323769,
+    "ast_hash": "7ec32d7f2e8c1a89480daa8beae43564",
+    "semantic_hash": ""
+  },
+  "src/content/content.js": {
+    "mtime": 1785156091.3038719,
+    "ast_hash": "a09b73e730741a29030648f1676fbe8a",
+    "semantic_hash": ""
+  },
+  "src/i18n.js": {
+    "mtime": 1779799118.323769,
+    "ast_hash": "7ddf2f0e7bb3a1cf708f471f91d0891e",
+    "semantic_hash": ""
+  },
+  "src/popup/popup.js": {
+    "mtime": 1785156853.1898441,
+    "ast_hash": "c2e06b3a758e6d4a4ffa506264ed38e6",
+    "semantic_hash": ""
+  },
+  "tests/model-config.test.js": {
+    "mtime": 1785156829.6457825,
+    "ast_hash": "e87509988963034e0c324ed776feb440",
+    "semantic_hash": ""
+  },
+  ".github/workflows/build.yml": {
+    "mtime": 1785156162.5850527,
+    "ast_hash": "2644203cb4bc44811f906afac5fb07d1",
+    "semantic_hash": ""
+  },
+  ".github/workflows/checks.yml": {
+    "mtime": 1785156162.5130527,
+    "ast_hash": "81cfb420dd20d1d90002986321afeef5",
+    "semantic_hash": ""
+  },
+  "ARCHITECTURE_PLAN.md": {
+    "mtime": 1785156256.2122922,
+    "ast_hash": "c56be490fd5e088fd4b6cf9d3ac2cd1f",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1785156693.1004248,
+    "ast_hash": "a67ed37c30aaab0049cc900987b0966c",
+    "semantic_hash": ""
+  },
+  "src/popup/popup.html": {
+    "mtime": 1785156859.2938602,
+    "ast_hash": "33f96a73901f8fb64cc9cdb879a24694",
+    "semantic_hash": ""
+  },
+  "assets/icons/icon128.png": {
+    "mtime": 1768676900.513999,
+    "ast_hash": "f1e869774e0d86c873aa5ed038943561",
+    "semantic_hash": ""
+  },
+  "assets/icons/icon16.png": {
+    "mtime": 1768676900.5140336,
+    "ast_hash": "f7d81f14d17839ff478f1fd96ec88a16",
+    "semantic_hash": ""
+  },
+  "assets/icons/icon48.png": {
+    "mtime": 1768676900.5140336,
+    "ast_hash": "935f20503b5b424b723c33dbf1167cbf",
+    "semantic_hash": ""
+  }
+}

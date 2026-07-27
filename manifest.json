@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AdGuard Privacy",
-  "version": "3.4.9",
+  "version": "3.5.0",
   "description": "Блокировщик рекламы и защиты конфиденциальности",
   "permissions": [
     "storage",
@@ -62,6 +62,7 @@
         "*://*.amu.kz/*"
       ],
       "js": [
+        "src/config.js",
         "src/i18n.js",
         "src/content/cache.js",
         "src/content/content.js"

@@ -1,28 +1,11 @@
-const CONFIG = {
-    MODELS: ['gemini-3.5-flash', 'gemini-3.1-flash-lite'],
-    MODELS_PRO: ['gemini-3.1-pro-preview'],
-    MODELS_PRO_FALLBACK: ['gemini-3.5-flash', 'gemini-3.1-flash-lite'],
-    API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
-    GITHUB_REPO: 'mansur54321/KSTU-AI',
-    GITHUB_API: 'https://api.github.com/repos/',
-    STATS_SERVER_URL: 'http://159.223.3.49:3000/api/log',
-    CACHE_SERVER_URL: 'http://159.223.3.49:3000/api/cache',
-    CACHE_STORE_TOKEN: 'kstu-ai-cache-store-v1',
-    CACHE_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArpmnVIZdwHPHzOMear90
-miV7ouqm1pYaHCLUgOXdeqMGIKiXiA9n+y1e96NCXAYZzYbYj3KvwZBJdF2azUZt
-S8LtVsnfuUd9A6MMkgkalApKF8l9N8BIMGtwvsy5YdB36kHztEmeIEFCdMr6OVd9
-dosgI/aMV67UXlrTDEYjNY6hib0gW33fFoHo2KxoeTk5r/l6hN77nP5oBMHHxD17
-qoa9oxnCkWkX2Wig3hNapvjmIOXmmcny1fuKUFjQAgUU+HshcmieglpoZlEWxIS+
-d4dtJcr2ZSYPaxL7PV43h8sHjLFVwzMiK/CvjApCXDoW/z2zz1AxZoUsFJ4quZQn
-XQIDAQAB
------END PUBLIC KEY-----`,
-    RETRY: { MAX_ATTEMPTS: 3, BASE_DELAY_MS: 1000, BACKOFF_MULTIPLIER: 2 },
-    HOTKEY_CODE: 'KeyS',
-    MARKER_COLOR: '#888888',
-    API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/,
-    VERSION: '3.4.9'
-};
+importScripts('../config.js');
+
+const {
+    CONFIG,
+    selectModels,
+    getFallbackModels,
+    getGenerationConfig
+} = globalThis.KSTU_AI_CONFIG;
 
 const GITHUB_API_URL = `https://api.github.com/repos/${CONFIG.GITHUB_REPO}/releases/latest`;
 const DEBUG_PREFIX = '[KSTU-AI]';
@@ -191,7 +174,7 @@ function compareVersions(v1, v2) {
 async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
     const requestBody = {
         contents: [{ parts: parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 1.0 }
+        generationConfig: getGenerationConfig()
     };
 
     let lastError = null;
@@ -279,7 +262,7 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
 async function validateApiKey(key) {
     if (!CONFIG.API_KEY_REGEX.test(key)) return false;
     try {
-        const res = await fetchWithTimeout(`${CONFIG.API_BASE_URL}gemini-3.5-flash:generateContent?key=${key}`, {
+        const res = await fetchWithTimeout(`${CONFIG.API_BASE_URL}${CONFIG.VALIDATION_MODEL}:generateContent?key=${key}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
@@ -354,19 +337,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'get_models') {
-        chrome.storage.sync.get(['cfgProUseFlash', 'cfgProFlashPriority'], (storage) => {
-            let selectedModels = request.pro ? [...CONFIG.MODELS_PRO] : [...CONFIG.MODELS];
-            if (request.pro) {
-                const useFlash = storage.cfgProUseFlash === true;
-                const flashPriority = storage.cfgProFlashPriority === true;
-                if (useFlash) {
-                    if (flashPriority) {
-                        selectedModels.unshift('gemini-3.5-flash');
-                    } else {
-                        selectedModels.push('gemini-3.5-flash');
-                    }
-                }
-            }
+        chrome.storage.sync.get(['cfgProLegacy'], (storage) => {
+            const selectedModels = selectModels({
+                pro: request.pro === true,
+                useLegacyPro: storage.cfgProLegacy === true
+            });
             console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
             sendResponse(selectedModels);
         });
@@ -374,7 +349,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'get_fallback_models') {
-        sendResponse(CONFIG.MODELS_PRO_FALLBACK);
+        sendResponse(getFallbackModels());
     }
 
     if (request.action === 'cache_lookup') {
