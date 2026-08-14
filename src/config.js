@@ -1,22 +1,22 @@
 (function initKstuConfig(root) {
     const CONFIG = {
         MODELS: [
-            'gemini-3.6-flash',
+            'gemini-3.7-flash',
             'gemini-3.5-flash-lite'
         ],
         MODELS_PRO: [
             'gemini-3.1-pro-preview'
         ],
         MODELS_PRO_FALLBACK: [
-            'gemini-3.6-flash',
+            'gemini-3.7-flash',
             'gemini-3.5-flash-lite'
         ],
-        VALIDATION_MODEL: 'gemini-3.6-flash',
+        VALIDATION_MODEL: 'gemini-3.7-flash',
         API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
         GITHUB_REPO: 'mansur54321/KSTU-AI',
         GITHUB_API: 'https://api.github.com/repos/',
-        STATS_SERVER_URL: 'http://159.223.3.49:3000/api/log',
-        CACHE_SERVER_URL: 'http://159.223.3.49:3000/api/cache',
+        STATS_SERVER_URL: 'https://stats.xd1.me/api/log',
+        CACHE_SERVER_URL: 'https://stats.xd1.me/api/cache',
         CACHE_STORE_TOKEN: 'kstu-ai-cache-store-v1',
         CACHE_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArpmnVIZdwHPHzOMear90
@@ -34,8 +34,7 @@ XQIDAQAB
         },
         HOTKEY_CODE: 'KeyS',
         MARKER_COLOR: '#888888',
-        API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/,
-        VERSION: '3.5.0'
+        API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/
     };
 
     function selectModels({ pro = false, useLegacyPro = false } = {}) {

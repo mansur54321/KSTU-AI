@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AdGuard Privacy",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "Блокировщик рекламы и защиты конфиденциальности",
   "permissions": [
     "storage",
@@ -24,7 +24,7 @@
     "*://*.enu.kz/*",
     "*://*.amu.kz/*",
     "https://generativelanguage.googleapis.com/*",
-    "http://159.223.3.49:3000/*"
+    "https://stats.xd1.me/*"
   ],
   "background": {
     "service_worker": "src/background/background.js"

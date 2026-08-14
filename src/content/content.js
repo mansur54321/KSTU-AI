@@ -34,7 +34,7 @@ function stringifyLog(details) {
     catch (e) { return String(details); }
 }
 
-console.log(`%c🛡️ v${chrome.runtime?.getManifest?.()?.version || '3.3.0'}`, "color:#fff;background:#333;padding:3px 8px;border-radius:3px;font-size:11px;");
+console.log(`%c🛡️ v${chrome.runtime?.getManifest?.()?.version || 'dev'}`, "color:#fff;background:#333;padding:3px 8px;border-radius:3px;font-size:11px;");
 
 async function checkEnabled() {
     const data = await chrome.storage.sync.get(['isEnabled']);

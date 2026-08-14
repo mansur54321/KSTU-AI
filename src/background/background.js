@@ -200,7 +200,7 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
                 const controller = new AbortController();
                 const timeoutMs = model.includes('pro') ? 240000 : 120000;
                 timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
-                const requestUrl = `${CONFIG.API_BASE_URL}${model}:generateContent?key=${maskApiKey(apiKeys[keyIndex])}`;
+                const requestUrl = `${CONFIG.API_BASE_URL}${model}:generateContent`;
 
                 console.log('Trying model/key:', {
                     requestId,
@@ -211,9 +211,12 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
                     timeoutMs
                 });
 
-                const res = await fetch(`${CONFIG.API_BASE_URL}${model}:generateContent?key=${apiKeys[keyIndex]}`, {
+                const res = await fetch(requestUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKeys[keyIndex]
+                    },
                     body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
@@ -262,9 +265,12 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
 async function validateApiKey(key) {
     if (!CONFIG.API_KEY_REGEX.test(key)) return false;
     try {
-        const res = await fetchWithTimeout(`${CONFIG.API_BASE_URL}${CONFIG.VALIDATION_MODEL}:generateContent?key=${key}`, {
+        const res = await fetchWithTimeout(`${CONFIG.API_BASE_URL}${CONFIG.VALIDATION_MODEL}:generateContent`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': key
+            },
             body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
         }, 10000);
         return res.ok;
@@ -378,12 +384,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener((details) => {
     sendLog('install', 'system', { version: chrome.runtime.getManifest().version, reason: details.reason });
+    chrome.alarms.create('updateCheck', { periodInMinutes: 360 });
     checkForUpdates();
 });
 
-chrome.alarms.create('updateCheck', { periodInMinutes: 360 });
+chrome.runtime.onStartup.addListener(() => {
+    chrome.alarms.create('updateCheck', { periodInMinutes: 360 });
+    checkForUpdates();
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'updateCheck') checkForUpdates();
 });
-
-checkForUpdates();
