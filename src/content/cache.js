@@ -4,10 +4,28 @@ function normalizeCacheText(value) {
     return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function fallbackHash(value) {
+    // Deterministic 128-bit hash for non-secure contexts where crypto.subtle is
+    // unavailable (e.g. http portals). Consistent within the same page, so both
+    // store and lookup in the content script agree.
+    let h1 = 0x811c9dc5, h2 = 0x01000193, h3 = 0x85ebca6b, h4 = 0xc2b2ae35;
+    for (let i = 0; i < value.length; i++) {
+        const c = value.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 0x01000193);
+        h2 = (Math.imul(h2 ^ c, 0x01000193) + (h2 >>> 0)) >>> 0;
+        h3 = Math.imul(h3 ^ c, 0x9e3779b1);
+        h4 = (Math.imul(h4 ^ c, 0x85ebca6b) + (h4 >>> 0)) >>> 0;
+    }
+    return [h1, h2, h3, h4].map(h => (h >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
 async function sha256(value) {
-    const bytes = new TextEncoder().encode(value);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    if (globalThis.crypto?.subtle) {
+        const bytes = new TextEncoder().encode(value);
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return fallbackHash(value);
 }
 
 function imageToken(src) {
@@ -34,7 +52,7 @@ function answerIdentity(answer) {
 async function hashQuestion(text, answers, images = []) {
     const normalizedQuestion = normalizeCacheText(text);
     const questionImages = collectImageTokens(images);
-    const answerSet = answers.map(answerIdentity).filter(Boolean).sort().join('|');
+    const answerSet = (answers || []).map(answerIdentity).filter(Boolean).sort().join('|');
     const hash = await sha256(`${normalizedQuestion}||${questionImages}||${answerSet}`);
     return 'q_' + hash.slice(0, 32);
 }
@@ -42,7 +60,7 @@ async function hashQuestion(text, answers, images = []) {
 async function hashQuestionV344(text, answers, images = []) {
     const normalizedQuestion = normalizeCacheText(text);
     const questionImages = collectImageTokens(images);
-    const answerSet = answers
+    const answerSet = (answers || [])
         .map(a => normalizeCacheText(a?.text) || imageToken(a?.imgSrc))
         .filter(Boolean)
         .sort()
@@ -53,7 +71,7 @@ async function hashQuestionV344(text, answers, images = []) {
 
 async function hashQuestionV343(text, answers) {
     const normalizedQuestion = normalizeCacheText(text);
-    const answerSet = answers.map(a => normalizeCacheText(a.text)).filter(Boolean).sort().join('|');
+    const answerSet = (answers || []).map(a => normalizeCacheText(a.text)).filter(Boolean).sort().join('|');
     const hash = await sha256(`${normalizedQuestion}||${answerSet}`);
     return 'q_' + hash.slice(0, 32);
 }
@@ -69,21 +87,61 @@ async function cacheKeys(text, answers, images = []) {
 
 function correctIdsToAnswerTexts(answers, correctIds) {
     return correctIds
-        .map(id => answerIdentity(answers.find(a => a.id === id)))
-        .filter(Boolean)
-        .map(normalizeCacheText);
+        .map(id => {
+            const match = (answers || []).find(a => a.id === id);
+            return match ? answerIdentity(match) : normalizeCacheText(id);
+        })
+        .filter(Boolean);
 }
 
 function answerTextsToCurrentIds(answers, correctTexts) {
     const correctSet = new Set((correctTexts || []).map(normalizeCacheText));
-    return answers.filter(a => correctSet.has(answerIdentity(a))).map(a => a.id);
+    return answers.filter(a =>
+        correctSet.has(answerIdentity(a)) || correctSet.has(normalizeCacheText(a.text))
+    ).map(a => a.id);
 }
 
-function entryToCurrentAnswer(entry, answers) {
+function pairsToTexts(pairs) {
+    return (pairs || []).map(p => `${p.zone}:${p.item}`);
+}
+
+function textsToPairs(correctTexts) {
+    return (correctTexts || [])
+        .map(t => {
+            const parts = String(t).split(':');
+            const zone = parseInt(parts[0], 10);
+            const item = parts.slice(1).join(':');
+            if (!Number.isInteger(zone) || !item) return null;
+            return { zone, item };
+        })
+        .filter(Boolean);
+}
+
+function entryToCurrentAnswer(entry, answers, type = 'choice') {
     if (!entry) return null;
+    const reason = entry.reason || 'cache';
+    const source = entry.source || 'cache';
+
+    if (type === 'text_input') {
+        const answer = (entry.correctTexts?.[0] ?? '').toString();
+        if (!answer) return null;
+        return { answer, reason, source };
+    }
+
+    if (type === 'moodle_dd') {
+        const pairs = textsToPairs(entry.correctTexts);
+        if (!pairs.length) return null;
+        return { pairs, reason, source };
+    }
+
+    // choice
     if (entry.correctTexts?.length) {
         const currentIds = answerTextsToCurrentIds(answers, entry.correctTexts);
-        if (currentIds.length) return { correct: currentIds, reason: entry.reason || 'cache', source: entry.source || 'cache' };
+        if (currentIds.length) return { correct: currentIds, reason, source };
+    }
+    if (entry.correct?.length) {
+        const valid = entry.correct.filter(id => (answers || []).some(a => a.id === id));
+        if (valid.length) return { correct: valid, reason, source };
     }
     return null;
 }
@@ -109,16 +167,6 @@ async function serverCacheStoreByKey(key, text, correctIds, reason, source = 'cl
     });
 }
 
-async function localCacheStore(text, answers, correctIds, reason, images = []) {
-    if (!text || !answers?.length || !correctIds?.length) return;
-    const key = await hashQuestion(text, answers, images);
-    const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
-    if (!correctTexts.length) return;
-    const cache = await getCache();
-    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', source: 'local', ts: Date.now() };
-    await saveCache(cache);
-}
-
 async function getCache() {
     const data = await chrome.storage.local.get([ANSWER_CACHE_KEY]);
     return data[ANSWER_CACHE_KEY] || {};
@@ -128,27 +176,28 @@ async function saveCache(cache) {
     await chrome.storage.local.set({ [ANSWER_CACHE_KEY]: cache });
 }
 
-async function cacheLookup(text, answers, images = []) {
-    if (!text || !answers?.length) return null;
+async function cacheLookup(text, answers, images = [], type = 'choice') {
+    if (!text) return null;
+    if (type === 'choice' && !answers?.length) return null;
     const keys = await cacheKeys(text, answers, images);
     const primaryKey = keys[0];
 
     for (const key of keys) {
         const serverEntry = await serverCacheLookupByKey(key);
-        if (serverEntry?.correct?.length) {
-            const mapped = entryToCurrentAnswer(serverEntry, answers);
-            if (!mapped?.correct?.length) continue;
+        if (serverEntry?.correct?.length || serverEntry?.correctTexts?.length) {
+            const mapped = entryToCurrentAnswer(serverEntry, answers, type);
+            if (!mapped) continue;
             const cache = await getCache();
             cache[primaryKey] = {
-                correct: mapped.correct,
-                correctTexts: serverEntry.correctTexts || correctIdsToAnswerTexts(answers, mapped.correct),
+                correct: mapped.correct || [],
+                correctTexts: serverEntry.correctTexts || correctIdsToAnswerTexts(answers, mapped.correct || []),
                 reason: serverEntry.reason || 'server_cache',
                 source: key === primaryKey ? 'server' : 'server_legacy',
                 ts: Date.now()
             };
             await saveCache(cache);
             if (key !== primaryKey) {
-                serverCacheStoreByKey(primaryKey, text, mapped.correct, 'legacy_migrated', 'attempt_view', cache[primaryKey].correctTexts);
+                serverCacheStoreByKey(primaryKey, text, mapped.correct || [], 'legacy_migrated', 'attempt_view', cache[primaryKey].correctTexts);
             }
             return mapped;
         }
@@ -158,10 +207,10 @@ async function cacheLookup(text, answers, images = []) {
     for (const key of keys) {
         const entry = cache[key];
         if (!entry) continue;
-        const mapped = entryToCurrentAnswer(entry, answers);
-        if (!mapped?.correct?.length) continue;
+        const mapped = entryToCurrentAnswer(entry, answers, type);
+        if (!mapped) continue;
         if (key !== primaryKey) {
-            cache[primaryKey] = { ...entry, correct: mapped.correct, source: 'local_legacy', ts: Date.now() };
+            cache[primaryKey] = { ...entry, correct: mapped.correct || [], source: 'local_legacy', ts: Date.now() };
             await saveCache(cache);
         }
         return mapped;
@@ -169,26 +218,35 @@ async function cacheLookup(text, answers, images = []) {
     return null;
 }
 
-async function cacheStore(text, answers, correctIds, reason, images = []) {
-    if (!text || !answers?.length || !correctIds?.length) return;
-    const key = await hashQuestion(text, answers, images);
-    const correctTexts = correctIdsToAnswerTexts(answers, correctIds);
-    if (!correctTexts.length) return;
-    const cache = await getCache();
-    cache[key] = { correct: correctIds, correctTexts, reason: reason || '', source: 'trusted', ts: Date.now() };
-    await saveCache(cache);
-    await serverCacheStoreByKey(key, text, correctIds, reason, 'attempt_view', correctTexts);
-}
+async function cacheStoreFromResult(text, answers, result, images = [], type = 'choice') {
+    if (!result || !text) return;
 
-async function cacheStoreFromResult(text, answers, result, images = []) {
-    if (!result) return;
-    if (result.correct) {
-        await localCacheStore(text, answers, result.correct, result.reason, images);
-    } else if (result.answer !== undefined) {
-        await localCacheStore(text, answers, [String(result.answer)], result.reason, images);
-    } else if (result.pairs) {
-        await localCacheStore(text, answers, result.pairs.map(p => `${p.zone}:${p.item}`), result.reason, images);
+    let correct = [];
+    let correctTexts = [];
+
+    if (type === 'text_input') {
+        if (result.answer === undefined) return;
+        correctTexts = [String(result.answer)];
+    } else if (type === 'moodle_dd') {
+        if (!result.pairs?.length) return;
+        correctTexts = pairsToTexts(result.pairs);
+    } else {
+        if (!result.correct?.length) return;
+        correct = result.correct;
+        correctTexts = correctIdsToAnswerTexts(answers, result.correct);
     }
+
+    if (!correctTexts.length) return;
+    const key = await hashQuestion(text, answers, images);
+    const cache = await getCache();
+    cache[key] = {
+        correct,
+        correctTexts,
+        reason: result.reason || '',
+        source: 'local',
+        ts: Date.now()
+    };
+    await saveCache(cache);
 }
 
 function parseAttemptView() {
@@ -248,4 +306,20 @@ async function cacheFromAttemptView() {
     await saveCache(cache);
     console.log(`${DEBUG_PREFIX} Cached ${added} new answers from AttemptView (${questions.length} total)`);
     return added;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        normalizeCacheText,
+        sha256,
+        hashQuestion,
+        hashQuestionV344,
+        hashQuestionV343,
+        cacheKeys,
+        correctIdsToAnswerTexts,
+        answerTextsToCurrentIds,
+        pairsToTexts,
+        textsToPairs,
+        entryToCurrentAnswer
+    };
 }

@@ -298,7 +298,7 @@ async function serverCacheLookup(key) {
 async function serverCacheStore(payload) {
     const res = await fetchWithTimeout(`${CONFIG.CACHE_SERVER_URL}/store`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Cache-Token': CONFIG.CACHE_STORE_TOKEN },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     }, 5000);
     if (!res.ok) return { status: 'error', error: `HTTP ${res.status}` };
@@ -312,6 +312,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'ask_gemini') {
+        if (!Array.isArray(request.parts) || !Array.isArray(request.apiKeys) || !Array.isArray(request.models)) {
+            sendResponse({ error: 'Invalid request shape', requestId: request.requestId });
+            return true;
+        }
         askGeminiViaApi(request.parts, request.apiKeys, request.models, request.requestId)
             .then(sendResponse)
             .catch(e => sendResponse({ error: errorMessage(e), requestId: request.requestId }));
@@ -359,6 +363,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'cache_lookup') {
+        if (typeof request.key !== 'string' || !request.key) {
+            sendResponse({ hit: false, error: 'invalid key' });
+            return true;
+        }
         serverCacheLookup(request.key)
             .then(sendResponse)
             .catch(e => sendResponse({ hit: false, error: errorMessage(e) }));
@@ -366,6 +374,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'cache_store') {
+        if (typeof request.key !== 'string' || !request.key) {
+            sendResponse({ status: 'error', error: 'invalid key' });
+            return true;
+        }
         serverCacheStore({
             key: request.key,
             question_preview: request.question_preview,

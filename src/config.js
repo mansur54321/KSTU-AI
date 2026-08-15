@@ -17,7 +17,6 @@
         GITHUB_API: 'https://api.github.com/repos/',
         STATS_SERVER_URL: 'https://stats.xd1.me/api/log',
         CACHE_SERVER_URL: 'https://stats.xd1.me/api/cache',
-        CACHE_STORE_TOKEN: 'kstu-ai-cache-store-v1',
         CACHE_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArpmnVIZdwHPHzOMear90
 miV7ouqm1pYaHCLUgOXdeqMGIKiXiA9n+y1e96NCXAYZzYbYj3KvwZBJdF2azUZt
@@ -33,6 +32,7 @@ XQIDAQAB
             BACKOFF_MULTIPLIER: 2
         },
         HOTKEY_CODE: 'KeyS',
+        HOTKEY_NEXT_PAGE: 'KeyD',
         MARKER_COLOR: '#888888',
         API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/
     };

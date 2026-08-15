@@ -43,6 +43,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             .filter(k => API_KEY_REGEX.test(k));
     }
 
+    // One-time migration: legacy builds stored keys in chrome.storage.sync.
+    // Keys now live in chrome.storage.local (not synced, not exported by default).
+    async function loadApiKeys() {
+        const local = await chrome.storage.local.get(['geminiApiKeys']);
+        if (local.geminiApiKeys) return local.geminiApiKeys;
+        const legacy = await chrome.storage.sync.get(['geminiApiKeys']);
+        if (Array.isArray(legacy.geminiApiKeys) && legacy.geminiApiKeys.length) {
+            await chrome.storage.local.set({ geminiApiKeys: legacy.geminiApiKeys });
+            await chrome.storage.sync.remove('geminiApiKeys');
+            return legacy.geminiApiKeys;
+        }
+        return [];
+    }
+
     function normalizeKeyLines(text) {
         return text
             .split(/[\s,;]+/)
@@ -63,14 +77,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const data = await chrome.storage.sync.get([
-        'isEnabled', 'solvedCount', 'geminiApiKeys',
+        'isEnabled', 'solvedCount',
         'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels', 'cfgFastMode',
         'cfgProLegacy'
     ]);
 
     let isEnabled = data.isEnabled !== false;
     let solvedCount = data.solvedCount || 0;
-    let apiKeys = data.geminiApiKeys || [];
+    let apiKeys = await loadApiKeys();
     let autoClick = data.cfgAutoClick !== false;
     let marker = data.cfgMarker !== false;
     let language = data.language || 'ru';
@@ -188,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveKeysBtn.addEventListener('click', () => {
         keysInputRaw = normalizeKeyLines(document.activeElement === keysInput ? keysInput.value : keysInputRaw);
         const keys = parseApiKeys(keysInputRaw);
-        chrome.storage.sync.set({ geminiApiKeys: keys }, () => {
+        chrome.storage.local.set({ geminiApiKeys: keys }, () => {
             statusMsg.innerText = `Сохранено ${keys.length} ключей`;
             statusMsg.style.color = '#67b279';
             setTimeout(() => statusMsg.innerText = '', 2000);
@@ -244,6 +258,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     exportBtn.addEventListener('click', async () => {
         const exportData = await chrome.storage.sync.get(null);
+        // API keys are secrets: never write them to the export file.
+        delete exportData.geminiApiKeys;
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -261,11 +277,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const text = await file.text();
             const importData = JSON.parse(text);
             if (typeof importData !== 'object') throw new Error('Invalid format');
+            const legacyKeys = importData.geminiApiKeys;
+            // Keys never belong in sync storage; pull them out before writing settings.
+            delete importData.geminiApiKeys;
             await chrome.storage.sync.set(importData);
-            if (importData.geminiApiKeys) {
-                keysInputRaw = importData.geminiApiKeys.join('\n');
+            if (legacyKeys) {
+                await chrome.storage.local.set({ geminiApiKeys: legacyKeys });
+                keysInputRaw = legacyKeys.join('\n');
                 renderKeysInput(true);
-                updateKeyMeter(importData.geminiApiKeys.length);
+                updateKeyMeter(legacyKeys.length);
             }
             if (importData.cfgAutoClick !== undefined) cfgAutoClick.checked = importData.cfgAutoClick;
             if (importData.cfgMarker !== undefined) cfgMarker.checked = importData.cfgMarker;

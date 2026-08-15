@@ -54,39 +54,6 @@
   opacity: 0.9;
 }
 
-/* Solution Panel */
-.ai-solution-panel {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  width: 220px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid #2e7d32;
-  border-radius: 8px;
-  padding: 15px;
-  z-index: 999999;
-  font-family: sans-serif;
-  font-size: 13px;
-  color: #333;
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
-}
-
-/* Stealth Badge (for marking answers) */
-.ai-stealth-badge {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.85);
-  font-family: sans-serif;
-  font-size: 10px;
-  font-weight: bold;
-  padding: 1px 4px;
-  border-radius: 3px;
-  border: 1px solid #ccc;
-  z-index: 2147483647;
-  pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  white-space: nowrap;
-}
-
 /* Inline Marker */
 .ai-marker {
   font-weight: bold;

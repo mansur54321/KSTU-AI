@@ -1,9 +1,10 @@
-const HOTKEY_CODE = 'KeyS';
-const HOTKEY_NEXT_PAGE = 'KeyD';
-const MARKER_COLOR = '#999999';
-const RETRY_CONFIG = { maxAttempts: 3, baseDelay: 1000, backoffMultiplier: 2 };
-const DEBUG_PREFIX = '[KSTU-AI]';
 const MODEL_POLICY = globalThis.KSTU_AI_CONFIG;
+const { CONFIG } = MODEL_POLICY;
+const HOTKEY_CODE = CONFIG.HOTKEY_CODE;
+const HOTKEY_NEXT_PAGE = CONFIG.HOTKEY_NEXT_PAGE;
+const MARKER_COLOR = CONFIG.MARKER_COLOR;
+const RETRY_CONFIG = CONFIG.RETRY;
+const DEBUG_PREFIX = '[KSTU-AI]';
 
 function getModels(pro) {
     return new Promise((resolve) => {
@@ -439,10 +440,18 @@ async function askGeminiWithRetry(parts, apiKeys, models, requestId, attempt = 1
     }
 }
 
+function isFatalApiError(error) {
+    const msg = error?.message || String(error);
+    // 400/401/403 = bad request or bad key: retrying other models/keys already
+    // happened in the background, so falling back again only wastes quota.
+    return /HTTP 4(0[0-9]|1[0-9]|29)\b|INVALID_ARGUMENT|PERMISSION_DENIED|invalid.*key|API key/i.test(msg);
+}
+
 async function askGeminiWithProFallback(parts, apiKeys, models, requestId) {
     try {
         return await askGeminiWithRetry(parts, apiKeys, models, requestId);
     } catch (error) {
+        if (isFatalApiError(error)) throw error;
         const fallbackModels = await getFallbackModels();
         console.warn(`${DEBUG_PREFIX} Pro failed, using fallback ${stringifyLog({ requestId, error: error.message, fallbackModels })}`);
         return askGeminiWithRetry(parts, apiKeys, fallbackModels, `${requestId}-fallback`);
@@ -529,7 +538,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
         let model = 'cache';
         let responseData = null;
 
-        const cached = await cacheLookup(q.text, q.answers, q.images || []);
+        const cached = await cacheLookup(q.text, q.answers, q.images || [], q.type);
         if (cached) {
             q.cacheHit = true;
             console.groupCollapsed(`${DEBUG_PREFIX} Cache hit ${requestId}`);
@@ -559,7 +568,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
             console.log('Answered by model:', { requestId, model, result });
             console.groupEnd();
             logGroupOpen = false;
-            await cacheStoreFromResult(q.text, q.answers, result, q.images || []);
+            await cacheStoreFromResult(q.text, q.answers, result, q.images || [], q.type);
         }
 
         if (q.domElement) q.domElement.style.opacity = '1';
@@ -595,7 +604,16 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
         } else if (result && result.correct) {
             let found = false;
             q.answers.forEach(ans => {
-                if (result.correct.includes(ans.id) || result.correct.some(c => ans.text.includes(c))) {
+                const normalizedText = ans.text?.trim().toLowerCase().replace(/\s+/g, ' ') || '';
+                const isMatch = result.correct.some(c => {
+                    const id = String(c).trim();
+                    if (!id) return false;
+                    return id === ans.id ||
+                        id.toLowerCase() === ans.id.toLowerCase() ||
+                        normalizedText === id.toLowerCase() ||
+                        normalizedText.includes(id.toLowerCase());
+                });
+                if (isMatch) {
                     found = true;
                     if (doClick && !ans.element.checked) ans.element.click();
                     if (doMark && ans.textElement) injectDotMarker(ans.textElement, result.reason || null);
@@ -625,8 +643,9 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
 async function start() {
     if (!await checkEnabled()) return;
 
-    const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels', 'cfgFastMode']);
-    const keys = storage.geminiApiKeys || [];
+    const storage = await chrome.storage.sync.get(['cfgProModels', 'cfgFastMode']);
+    const local = await chrome.storage.local.get(['geminiApiKeys']);
+    const keys = local.geminiApiKeys || [];
 
     const models = await getModels(storage.cfgProModels);
     const isPro = !!storage.cfgProModels;
@@ -813,9 +832,10 @@ async function solveAndNext() {
 async function init() {
     if (!await checkEnabled()) return;
     await I18N.init();
-    unlockSite();
 
     if (window.top !== window) return;
+
+    unlockSite();
 
     if (location.pathname.includes('AttemptView') || location.pathname.includes('AttemptResult')) {
         cacheFromAttemptView();
@@ -864,12 +884,13 @@ async function init() {
             const el = e.target.closest('.que, .question-wrapper, table.question');
             if (el) {
                 e.preventDefault(); e.stopPropagation();
-                const storage = await chrome.storage.sync.get(['geminiApiKeys', 'cfgProModels']);
+                const storage = await chrome.storage.sync.get(['cfgProModels']);
+                const local = await chrome.storage.local.get(['geminiApiKeys']);
                 const models = await getModels(storage.cfgProModels);
-                const keys = storage.geminiApiKeys || [];
+                const keys = local.geminiApiKeys || [];
                 console.log(`${DEBUG_PREFIX} Alt-click solve`, { proModels: !!storage.cfgProModels, models, keysCount: keys.length });
                 const qs = extractQuestions();
-                const q = qs.find(x => x.domElement === el) || qs[0];
+                const q = qs.find(x => x.domElement === el);
                 if (q && keys.length) processQuestion(q, keys, models);
             }
         }
