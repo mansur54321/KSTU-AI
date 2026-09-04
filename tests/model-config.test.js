@@ -8,16 +8,16 @@ const {
     getGenerationConfig
 } = require('../src/config.js');
 
-test('basic mode uses Gemini 3.7 Flash with 3.5 Flash-Lite fallback', () => {
+test('basic mode uses Gemini 3.8 Flash with 3.5 Flash-Lite fallback', () => {
     assert.deepEqual(selectModels(), [
-        'gemini-3.7-flash',
+        'gemini-3.8-flash',
         'gemini-3.5-flash-lite'
     ]);
 });
 
 test('pro mode keeps the current Flash family when Legacy is disabled', () => {
     assert.deepEqual(selectModels({ pro: true }), [
-        'gemini-3.7-flash',
+        'gemini-3.8-flash',
         'gemini-3.5-flash-lite'
     ]);
 });
@@ -30,13 +30,13 @@ test('Legacy mode opts into Gemini 3.1 Pro', () => {
 
 test('Pro fallback uses the current Flash family', () => {
     assert.deepEqual(getFallbackModels(), [
-        'gemini-3.7-flash',
+        'gemini-3.8-flash',
         'gemini-3.5-flash-lite'
     ]);
 });
 
 test('validation uses the current primary Flash model', () => {
-    assert.equal(CONFIG.VALIDATION_MODEL, 'gemini-3.7-flash');
+    assert.equal(CONFIG.VALIDATION_MODEL, 'gemini-3.8-flash');
 });
 
 test('generation config omits deprecated sampling parameters', () => {

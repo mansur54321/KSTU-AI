@@ -5,6 +5,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версионирование — [SemVer](https://semver.org/lang/ru/).
 
+## [3.7.1] - 2026-09-04
+
+### Changed
+
+- Основная Gemini-модель и модель проверки ключей обновлены с `gemini-3.7-flash` до `gemini-3.8-flash`.
+- Fallback остаётся `gemini-3.5-flash-lite`.
+
 ## [3.7.0] - 2026-08-15
 
 ### Security

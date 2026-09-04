@@ -1,17 +1,17 @@
 (function initKstuConfig(root) {
     const CONFIG = {
         MODELS: [
-            'gemini-3.7-flash',
+            'gemini-3.8-flash',
             'gemini-3.5-flash-lite'
         ],
         MODELS_PRO: [
             'gemini-3.1-pro-preview'
         ],
         MODELS_PRO_FALLBACK: [
-            'gemini-3.7-flash',
+            'gemini-3.8-flash',
             'gemini-3.5-flash-lite'
         ],
-        VALIDATION_MODEL: 'gemini-3.7-flash',
+        VALIDATION_MODEL: 'gemini-3.8-flash',
         API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/models/',
         GITHUB_REPO: 'mansur54321/KSTU-AI',
         GITHUB_API: 'https://api.github.com/repos/',
