@@ -1,4 +1,4 @@
-importScripts('../config.js', 'platonus.js');
+importScripts('../config.js', 'platonus.js', 'platonus-result.js');
 
 const {
     CONFIG,
@@ -306,6 +306,21 @@ async function serverCacheStore(payload) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'get_platonus_result') {
+        if (!Number.isInteger(sender.tab?.id)) {
+            sendResponse({ error: 'Platonus tab is unavailable' });
+            return true;
+        }
+        chrome.scripting.executeScript({
+            target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] },
+            world: 'MAIN',
+            func: globalThis.KSTU_READ_PLATONUS_RESULT
+        })
+            .then(results => sendResponse(results[0]?.result || { ready: false }))
+            .catch(error => sendResponse({ error: errorMessage(error) }));
+        return true;
+    }
+
     if (request.action === 'get_platonus_questions') {
         if (!Number.isInteger(sender.tab?.id)) {
             sendResponse({ error: 'Platonus tab is unavailable' });

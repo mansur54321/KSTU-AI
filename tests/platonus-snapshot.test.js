@@ -210,7 +210,7 @@ test('background reads Platonus data in the requesting tab and frame in MAIN wor
     });
 
     assert.deepEqual(await worker.send({ tab: { id: 17 }, frameId: 3 }), expected);
-    assert.deepEqual(worker.imports, ['../config.js', 'platonus.js']);
+    assert.deepEqual(worker.imports, ['../config.js', 'platonus.js', 'platonus-result.js']);
     assert.equal(invocation.world, 'MAIN');
     assert.equal(invocation.target.tabId, 17);
     assert.deepEqual(Array.from(invocation.target.frameIds), [3]);

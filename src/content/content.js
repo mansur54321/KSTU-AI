@@ -1005,6 +1005,85 @@ async function solveAndNext() {
     }
 }
 
+function observePlatonusResults() {
+    if (!document.querySelector('[ng-app="PlatonusApp"]')) return;
+    let timer;
+    let running = false;
+    let changed = false;
+    let lastSignature = '';
+    let attemptedSignature = '';
+    let retries = 0;
+
+    function schedule(delay = 300) {
+        clearTimeout(timer);
+        timer = setTimeout(collect, delay);
+    }
+
+    async function collect() {
+        if (running) { changed = true; return; }
+        if (!document.querySelector('#questionBlock table thead')) return;
+        running = true;
+        try {
+            if (!await checkEnabled()) return;
+            const snapshot = await chrome.runtime.sendMessage({ action: 'get_platonus_result' });
+            if (!snapshot?.ready) return;
+            const verdict = globalThis.KSTU_VALIDATE_PLATONUS_RESULT(snapshot);
+            const signature = JSON.stringify([
+                verdict.summary,
+                verdict.accepted.map(question => [question.questionId, question.correctVariantIds, question.evidence]),
+                verdict.rejected.map(question => [question.questionId, question.selectedVariantIds])
+            ]);
+            if (signature === lastSignature) return;
+            if (signature === attemptedSignature && retries >= 3) return;
+            if (signature !== attemptedSignature) {
+                attemptedSignature = signature;
+                retries = 0;
+            }
+            function normalize(question) {
+                const content = platonusHtmlContent(question.textHtml);
+                return {
+                    ...question,
+                    text: content.text,
+                    images: content.images,
+                    answers: question.variants.map((variant, index) => {
+                        const answer = platonusHtmlContent(variant.textHtml);
+                        return { id: String.fromCharCode(65 + index), variantId: variant.id, text: answer.text, imgSrc: answer.images[0] };
+                    })
+                };
+            }
+            const result = await applyPlatonusValidation({
+                summary: verdict.summary,
+                accepted: verdict.accepted.map(normalize),
+                rejected: verdict.rejected.map(normalize)
+            });
+            console.log(`${DEBUG_PREFIX} Platonus result validation`, { ...verdict.summary, ...result });
+            const score = `${verdict.summary.correct}/${verdict.summary.total}`;
+            if (result.failed) {
+                showStealthNotify(`${score}. Подтверждено: ${result.verified}. Не отправлено на сервер: ${result.failed}.`, 'warning', 5000);
+                if (++retries < 3) schedule(5000);
+            } else {
+                lastSignature = signature;
+                showStealthNotify(result.verified || result.rejected
+                    ? `${score}. Подтверждено: ${result.verified}, отклонено: ${result.rejected}, отправлено: ${result.uploaded}.`
+                    : `${score}. По отдельным вопросам нет подтверждения.`, 'info', 5000);
+            }
+        } catch (error) {
+            console.warn(`${DEBUG_PREFIX} Platonus result validation failed:`, error.message);
+            if (++retries < 3) schedule(5000);
+        } finally {
+            running = false;
+            if (changed) { changed = false; schedule(); }
+        }
+    }
+
+    const observer = new MutationObserver(records => {
+        const block = document.getElementById('questionBlock');
+        if (block && records.some(record => block.contains(record.target) || Array.from(record.addedNodes).some(node => node === block || node.contains?.(block)))) schedule();
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+    schedule();
+}
+
 async function init() {
     if (!await checkEnabled()) return;
     await I18N.init();
@@ -1012,6 +1091,7 @@ async function init() {
     if (window.top !== window) return;
 
     unlockSite();
+    observePlatonusResults();
 
     if (location.pathname.includes('AttemptView') || location.pathname.includes('AttemptResult')) {
         cacheFromAttemptView();
