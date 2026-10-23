@@ -28,6 +28,9 @@ let currentKeyIndex = 0;
 let isExtensionEnabled = true;
 let isProcessingSingle = false;
 let isProcessingBatch = false;
+let isAutoAdvancing = false;
+let platonusPrefetch = null;
+let platonusPrefetchEpoch = 0;
 let requestCounter = 0;
 
 function stringifyLog(details) {
@@ -324,11 +327,11 @@ function extractQuestions() {
             const cells = row.querySelectorAll('td');
             const textContainer = cells.length > 1 ? cells[1] : row.querySelector('label');
             if (input && textContainer) {
-                answers.push({ id: letterId, text: textContainer.innerText.trim(), imgSrc: textContainer.querySelector('img')?.src, element: input, textElement: textContainer });
+                answers.push({ id: letterId, variantId: input.value, text: textContainer.innerText.trim(), imgSrc: textContainer.querySelector('img')?.src, element: input, textElement: textContainer });
             }
         });
         if (answers.length > 0) {
-            questions.push({ type: 'choice', platform: 'platonus', text, images: qImages, answers, isMultiSelect: document.querySelector('input[type="checkbox"]') !== null, domElement: platonusWrapper });
+            questions.push({ type: 'choice', platform: 'platonus', questionId: answers[0].element.name.replace(/^question/, ''), text, images: qImages, answers, isMultiSelect: answers.some(answer => answer.element.type === 'checkbox'), domElement: platonusWrapper });
         }
     }
 
@@ -512,6 +515,77 @@ function injectDotMarker(targetElement, reason = null) {
     targetElement.appendChild(marker);
 }
 
+function platonusHtmlContent(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    template.content.querySelectorAll('script, style').forEach(element => element.remove());
+    template.content.querySelectorAll('br, p, div, li, td').forEach(element => element.append('\n'));
+    return {
+        text: template.content.textContent.replace(/\s+/g, ' ').trim(),
+        images: Array.from(template.content.querySelectorAll('img[src]'), image => new URL(image.getAttribute('src'), location.href).href)
+    };
+}
+
+async function loadPlatonusAnswer(q, apiKeys, models, isCurrent = () => true) {
+    if (!await checkEnabled() || !isCurrent()) return null;
+    const cached = await cacheLookup(q.text, q.answers, q.images, q.type);
+    if (cached) return { result: cached, answers: q.answers };
+    const requestId = `prefetch-${q.number}-${Date.now()}-${++requestCounter}`;
+    const { parts } = await buildApiParts(q);
+    if (!await checkEnabled() || !isCurrent()) return null;
+    const response = await askGeminiWithProFallback(parts, apiKeys, models, requestId);
+    if (!response?.result) throw new Error('No prefetch response');
+    await cacheStoreFromResult(q.text, q.answers, response.result, q.images, q.type);
+    chrome.runtime.sendMessage({ action: 'log_event', type: 'solve_success', model: response.model, meta: { platform: 'platonus', cached: false } });
+    return { result: response.result, answers: q.answers };
+}
+
+async function preparePlatonusPrefetch(questions, apiKeys, models, enabled) {
+    const current = questions.find(question => question.platform === 'platonus');
+    if (!enabled || !current) {
+        platonusPrefetchEpoch++;
+        platonusPrefetch?.queue.stop();
+        platonusPrefetch = null;
+        return;
+    }
+    const epoch = platonusPrefetchEpoch;
+    try {
+        const snapshot = await chrome.runtime.sendMessage({ action: 'get_platonus_questions' });
+        if (epoch !== platonusPrefetchEpoch) return;
+        if (snapshot?.error || !snapshot?.questions) throw new Error(snapshot?.error || 'No Platonus snapshot');
+        if (snapshot.completed || snapshot.currentQuestionId !== current.questionId) return;
+        const session = JSON.stringify([snapshot.testingId, snapshot.attemptNumber, models, apiKeys]);
+        if (platonusPrefetch?.session !== session) {
+            platonusPrefetch?.queue.stop();
+            const state = { session, queue: null };
+            state.queue = new globalThis.KSTU_QUESTION_PREFETCH(question => loadPlatonusAnswer(question, apiKeys, models, () => platonusPrefetch === state && !state.queue.stopped));
+            platonusPrefetch = state;
+        }
+        const index = snapshot.questions.findIndex(question => question.questionId === current.questionId && question.number === snapshot.currentNumber);
+        if (index < 0) return;
+        for (const question of snapshot.questions.slice(index, index + 3)) {
+            if (question.number === snapshot.currentNumber && isQuestionAnswered(current)) continue;
+            const content = platonusHtmlContent(question.textHtml);
+            const answers = question.variants.map((variant, i) => {
+                const answer = platonusHtmlContent(variant.textHtml);
+                return { id: String.fromCharCode(65 + i), variantId: variant.id, text: answer.text, imgSrc: answer.images[0] };
+            });
+            const key = `${question.number}:${question.questionId}`;
+            const promise = platonusPrefetch.queue.enqueue(key, {
+                type: 'choice', platform: 'platonus', number: question.number, questionId: question.questionId,
+                text: content.text, images: content.images, answers, isMultiSelect: question.isMultiSelect
+            });
+            if (question.number === snapshot.currentNumber) {
+                current.prefetchedAnswer = promise;
+                current.prefetchSession = session;
+            }
+        }
+    } catch (error) {
+        console.warn(`${DEBUG_PREFIX} Platonus prefetch unavailable:`, error.message);
+        showStealthNotify('Фоновая загрузка недоступна. Решаю по одному вопросу.', 'warning', 2500);
+    }
+}
+
 async function processQuestion(q, apiKeys, models, isBatch = false) {
     if (!isBatch && isProcessingSingle) {
         console.warn(`${DEBUG_PREFIX} Duplicate single solve ignored`);
@@ -534,11 +608,19 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
     let success = false;
 
     try {
+        const prefetched = q.prefetchedAnswer ? await q.prefetchedAnswer.catch(error => {
+            q.prefetchedAnswer = null;
+            if (isFatalApiError(error)) throw error;
+            console.warn(`${DEBUG_PREFIX} Prefetch failed, retrying current question:`, error.message);
+            return null;
+        }) : null;
+        if (!await checkEnabled()) return false;
+        const sourceAnswers = prefetched?.answers || q.answers;
         let result = null;
         let model = 'cache';
         let responseData = null;
 
-        const cached = await cacheLookup(q.text, q.answers, q.images || [], q.type);
+        const cached = prefetched?.result || await cacheLookup(q.text, q.answers, q.images || [], q.type);
         if (cached) {
             q.cacheHit = true;
             console.groupCollapsed(`${DEBUG_PREFIX} Cache hit ${requestId}`);
@@ -569,6 +651,26 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
             console.groupEnd();
             logGroupOpen = false;
             await cacheStoreFromResult(q.text, q.answers, result, q.images || [], q.type);
+        }
+
+        if (q.platform === 'platonus') {
+            if (!await checkEnabled()) return false;
+            if (q.prefetchSession && q.prefetchSession !== platonusPrefetch?.session) {
+                q.prefetchedAnswer = null;
+                q.prefetchSession = null;
+                return false;
+            }
+            const current = extractQuestions().find(question => question.platform === 'platonus' && question.questionId === q.questionId);
+            if (!current) return false;
+            if (isQuestionAnswered(current)) return true;
+            const correctVariants = (result.correct || []).map(id => sourceAnswers.find(answer => answer.id === String(id).trim().toUpperCase())?.variantId).filter(Boolean);
+            if (correctVariants.length !== result.correct?.length) return false;
+            const correct = current.answers.filter(answer => correctVariants.includes(answer.variantId)).map(answer => answer.id);
+            if (!correct.length) return false;
+            result = { ...result, correct };
+            q.domElement.style.opacity = '1';
+            current.cacheHit = q.cacheHit;
+            q = current;
         }
 
         if (q.domElement) q.domElement.style.opacity = '1';
@@ -608,6 +710,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
                 const isMatch = result.correct.some(c => {
                     const id = String(c).trim();
                     if (!id) return false;
+                    if (q.platform === 'platonus') return id === ans.id;
                     return id === ans.id ||
                         id.toLowerCase() === ans.id.toLowerCase() ||
                         normalizedText === id.toLowerCase() ||
@@ -636,6 +739,7 @@ async function processQuestion(q, apiKeys, models, isBatch = false) {
         }
         return false;
     } finally {
+        if (q.domElement) q.domElement.style.opacity = '1';
         if (!isBatch) isProcessingSingle = false;
     }
 }
@@ -670,6 +774,8 @@ async function start() {
         showStealthNotify(I18N.t('notify.questionsNotFound'), 'warning');
         return { total: 0, solved: 0, failed: 0 };
     }
+
+    await preparePlatonusPrefetch(qs, keys, models, isFastMode);
 
     const pendingQs = qs.filter(q => !isQuestionAnswered(q));
     const alreadyAnswered = qs.length - pendingQs.length;
@@ -728,6 +834,9 @@ async function start() {
 }
 
 function getNextPageButton() {
+    const platonusNext = document.querySelector('#navigation button[data-testid="change-question-next"], #navigation button[ng-click="vm.nextQuestion()"]');
+    if (platonusNext) return platonusNext.disabled ? null : platonusNext;
+
     const current = document.querySelector('input.submitButton.current[onclick*="AttemptPage|page="]');
     const container = current?.closest('.buttons');
     if (!container) return null;
@@ -743,7 +852,47 @@ function getNextPageButton() {
 }
 
 function getFinishButton() {
-    return document.querySelector('input.submitButton[onclick*="AttemptFinish"], input.submitButton[value="Завершить"]');
+    return document.querySelector('#questionBlock button[data-testid="change-question-show-complete-dialog"], #questionBlock button[ng-click="vm.showCompleteDialog()"], input.submitButton[onclick*="AttemptFinish"], input.submitButton[value="Завершить"]');
+}
+
+function getPlatonusQuestionState() {
+    const wrapper = document.querySelector('#questionBlock .question-wrapper');
+    const inputs = Array.from(document.querySelectorAll('#questionBlock .table-question input'));
+    return {
+        value: document.querySelector('#navigation #question-select')?.value,
+        content: JSON.stringify([wrapper?.innerText.trim(), inputs.map(input => [input.name, input.id, input.value])])
+    };
+}
+
+async function waitForPlatonusQuestion(previousState, maxWaitMs = 10000) {
+    const started = Date.now();
+    while (Date.now() - started < maxWaitMs) {
+        const current = getPlatonusQuestionState();
+        const loading = document.querySelector('#navigation .loading');
+        const ready = !loading || loading.classList.contains('ng-hide') || getComputedStyle(loading).display === 'none';
+        if (ready && current.value !== previousState.value && current.content !== previousState.content && extractQuestions().length) return true;
+        await sleep(100);
+    }
+    return false;
+}
+
+async function waitForPlatonusAnswer(maxWaitMs = 10000) {
+    const questionId = extractQuestions().find(question => question.platform === 'platonus')?.questionId;
+    if (!questionId) return false;
+    const started = Date.now();
+    while (Date.now() - started < maxWaitMs) {
+        try {
+            const state = await chrome.runtime.sendMessage({ action: 'get_platonus_questions', stateOnly: true });
+            if (state?.error || state?.completed || state?.currentQuestionId !== questionId || state?.currentSaveError) return false;
+            if (state.currentSaved) return true;
+        } catch (error) {
+            console.warn(`${DEBUG_PREFIX} Cannot verify Platonus answer save:`, error.message);
+            return false;
+        }
+        if (!await checkEnabled()) return false;
+        await sleep(100);
+    }
+    return false;
 }
 
 function scheduleAttemptViewOpen() {
@@ -760,7 +909,7 @@ function scheduleAttemptViewOpen() {
 }
 
 function clickConfirmDialog() {
-    const okBtn = document.querySelector('#as-okButton, .as-okButton');
+    const okBtn = document.querySelector('#as-okButton, .as-okButton, .swal2-container .swal2-confirm:not([disabled])');
     if (okBtn) {
         console.log(`${DEBUG_PREFIX} Clicking confirm dialog button`);
         okBtn.click();
@@ -781,12 +930,18 @@ async function waitAndConfirmDialog(maxWaitMs = 8000) {
 
 async function finishTest() {
     console.log(`${DEBUG_PREFIX} Finishing test`);
-    const finishBtn = getFinishButton();
-    if (!finishBtn) {
+    let finishBtn = getFinishButton();
+    const started = Date.now();
+    while (finishBtn?.disabled && Date.now() - started < 8000) {
+        await sleep(250);
+        finishBtn = getFinishButton();
+    }
+    if (!finishBtn || finishBtn.disabled) {
         console.warn(`${DEBUG_PREFIX} Finish button not found`);
-        showStealthNotify('Кнопка завершения не найдена', 'error');
+        showStealthNotify('Завершение недоступно: проверь сохранение ответов', 'error');
         return;
     }
+    if (!await checkEnabled()) return;
     await chrome.storage.local.set({ autoSolvePending: false });
     finishBtn.click();
     const confirmed = await waitAndConfirmDialog();
@@ -794,38 +949,59 @@ async function finishTest() {
 }
 
 async function solveAndNext() {
-    if (!await checkEnabled()) return;
-    if (isProcessingBatch) {
-        console.warn(`${DEBUG_PREFIX} solveAndNext: batch already in progress`);
+    if (isAutoAdvancing || isProcessingBatch || isProcessingSingle) {
+        console.warn(`${DEBUG_PREFIX} solveAndNext: already in progress`);
         return;
     }
+    isAutoAdvancing = true;
+    try {
+        while (await checkEnabled()) {
+            const summary = await start();
+            if (!summary?.total) return;
+            if (summary.failed > 0) {
+                console.warn(`${DEBUG_PREFIX} solveAndNext stopped: unresolved questions`, summary);
+                showStealthNotify(`Остались ошибки: ${summary.failed}. Не перехожу дальше.`, 'error', 3000);
+                return;
+            }
 
-    const summary = await start();
-    if (summary?.failed > 0) {
-        console.warn(`${DEBUG_PREFIX} solveAndNext stopped: unresolved questions`, summary);
-        showStealthNotify(`Остались ошибки: ${summary.failed}. Не перехожу дальше.`, 'error', 3000);
-        return;
-    }
+            const platonus = !!document.querySelector('#navigation #question-select');
+            if (platonus && !await waitForPlatonusAnswer()) {
+                showStealthNotify('Platonus не подтвердил сохранение ответа. Автопереход остановлен.', 'error', 3500);
+                return;
+            }
+            const fastTransition = summary.alreadyAnswered || summary.allCached;
+            const nextBtn = getNextPageButton();
+            if (nextBtn) {
+                console.log(`${DEBUG_PREFIX} solveAndNext: clicking next page button`, { value: nextBtn.value });
+                if (!platonus) await chrome.storage.local.set({ autoSolvePending: true });
+                showStealthNotify('Следующая страница...', 'info', fastTransition ? 500 : 1500);
+                const previousState = platonus ? getPlatonusQuestionState() : null;
+                await sleep(fastTransition ? 100 : 1500);
+                if (!await checkEnabled()) return;
+                if (platonus) {
+                    const currentState = getPlatonusQuestionState();
+                    if (currentState.value !== previousState.value || currentState.content !== previousState.content) return;
+                }
+                nextBtn.click();
+                if (!platonus) return;
+                if (!await waitForPlatonusQuestion(previousState)) {
+                    showStealthNotify('Следующий вопрос не загрузился. Автопереход остановлен.', 'error', 3000);
+                    return;
+                }
+                continue;
+            }
 
-    const fastTransition = summary?.alreadyAnswered || summary?.allCached;
-    const nextBtn = getNextPageButton();
-    if (nextBtn) {
-        console.log(`${DEBUG_PREFIX} solveAndNext: clicking next page button`, { value: nextBtn.value });
-        await chrome.storage.local.set({ autoSolvePending: true });
-        showStealthNotify('Следующая страница...', 'info', fastTransition ? 500 : 1500);
-        await sleep(fastTransition ? 100 : 1500);
-        nextBtn.click();
-    } else {
-        const finishBtn = getFinishButton();
-        if (finishBtn) {
-            console.log(`${DEBUG_PREFIX} solveAndNext: no next page, finishing test`);
-            showStealthNotify('Последняя страница, завершаю...', 'info', fastTransition ? 500 : 2000);
-            await sleep(fastTransition ? 100 : 2000);
-            await finishTest();
-        } else {
-            console.log(`${DEBUG_PREFIX} solveAndNext: no next page and no finish button`);
-            showStealthNotify('Это последняя страница', 'warning');
+            if (getFinishButton()) {
+                showStealthNotify('Последняя страница, завершаю...', 'info', fastTransition ? 500 : 2000);
+                await sleep(fastTransition ? 100 : 2000);
+                await finishTest();
+            } else {
+                showStealthNotify('Это последняя страница', 'warning');
+            }
+            return;
         }
+    } finally {
+        isAutoAdvancing = false;
     }
 }
 
@@ -848,30 +1024,7 @@ async function init() {
         console.log(`${DEBUG_PREFIX} Auto-solve triggered after page navigation`);
         showStealthNotify('Авто-решение...', 'info', 2000);
         await sleep(1000);
-        const summary = await start();
-        if (summary?.failed > 0) {
-            console.warn(`${DEBUG_PREFIX} Auto-solve stopped: unresolved questions`, summary);
-            showStealthNotify(`Остались ошибки: ${summary.failed}. Автопереход остановлен.`, 'error', 4000);
-            return;
-        }
-
-        const fastTransition = summary?.alreadyAnswered || summary?.allCached;
-        const nextBtn = getNextPageButton();
-        if (nextBtn) {
-            await chrome.storage.local.set({ autoSolvePending: true });
-            showStealthNotify('Следующая страница...', 'info', fastTransition ? 500 : 1500);
-            await sleep(fastTransition ? 100 : 1500);
-            nextBtn.click();
-        } else {
-            const finishBtn = getFinishButton();
-            if (finishBtn) {
-                showStealthNotify('Последняя страница, завершаю...', 'info', fastTransition ? 500 : 2000);
-                await sleep(fastTransition ? 100 : 2000);
-                await finishTest();
-            } else {
-                showStealthNotify('Авто-решение завершено', 'success');
-            }
-        }
+        await solveAndNext();
     }
 
     window.addEventListener('keydown', (e) => {
@@ -884,12 +1037,13 @@ async function init() {
             const el = e.target.closest('.que, .question-wrapper, table.question');
             if (el) {
                 e.preventDefault(); e.stopPropagation();
-                const storage = await chrome.storage.sync.get(['cfgProModels']);
+                const storage = await chrome.storage.sync.get(['cfgProModels', 'cfgFastMode']);
                 const local = await chrome.storage.local.get(['geminiApiKeys']);
                 const models = await getModels(storage.cfgProModels);
                 const keys = local.geminiApiKeys || [];
                 console.log(`${DEBUG_PREFIX} Alt-click solve`, { proModels: !!storage.cfgProModels, models, keysCount: keys.length });
                 const qs = extractQuestions();
+                await preparePlatonusPrefetch(qs, keys, models, storage.cfgProModels && storage.cfgFastMode && keys.length > 0);
                 const q = qs.find(x => x.domElement === el);
                 if (q && keys.length) processQuestion(q, keys, models);
             }
@@ -900,6 +1054,11 @@ async function init() {
         if (area === 'sync' && changes.isEnabled) {
             isExtensionEnabled = changes.isEnabled.newValue !== false;
             if (!isExtensionEnabled) cleanupAIElements();
+        }
+        if ((area === 'sync' && ['isEnabled', 'cfgProModels', 'cfgFastMode'].some(key => changes[key]?.newValue === false)) || (area === 'local' && changes.geminiApiKeys)) {
+            platonusPrefetchEpoch++;
+            platonusPrefetch?.queue.stop();
+            platonusPrefetch = null;
         }
     });
 }

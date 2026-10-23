@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "AdGuard Privacy",
-  "version": "3.7.2",
+  "version": "3.8.0",
   "description": "Блокировщик рекламы и защиты конфиденциальности",
   "permissions": [
     "storage",
+    "scripting",
     "alarms",
     "activeTab"
   ],
@@ -65,6 +66,7 @@
         "src/config.js",
         "src/i18n.js",
         "src/content/cache.js",
+        "src/content/prefetch.js",
         "src/content/content.js"
       ],
       "css": [
