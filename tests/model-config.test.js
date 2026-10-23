@@ -15,17 +15,25 @@ test('basic mode uses Gemini 3.8 Flash with 3.5 Flash-Lite fallback', () => {
     ]);
 });
 
-test('pro mode keeps the current Flash family when Legacy is disabled', () => {
+test('pro mode defaults to Gemini 4 Argon', () => {
     assert.deepEqual(selectModels({ pro: true }), [
+        'gemini-4-argon'
+    ]);
+});
+
+test('disabling pro mode uses the current Flash family', () => {
+    assert.deepEqual(selectModels({ pro: false }), [
         'gemini-3.8-flash',
         'gemini-3.5-flash-lite'
     ]);
 });
 
-test('Legacy mode opts into Gemini 3.1 Pro', () => {
-    assert.deepEqual(selectModels({ pro: true, useLegacyPro: true }), [
-        'gemini-3.1-pro-preview'
-    ]);
+test('changing the selected pro models does not mutate the config', () => {
+    const models = selectModels({ pro: true });
+    models.push('test-model');
+
+    assert.deepEqual(CONFIG.MODELS_PRO, ['gemini-4-argon']);
+    assert.deepEqual(selectModels({ pro: true }), ['gemini-4-argon']);
 });
 
 test('Pro fallback uses the current Flash family', () => {

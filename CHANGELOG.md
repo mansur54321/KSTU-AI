@@ -5,6 +5,14 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версионирование — [SemVer](https://semver.org/lang/ru/).
 
+## [3.7.2] - 2026-10-23
+
+### Changed
+
+- Gemini 4 Argon (`gemini-4-argon`) заменяет Gemini 3.1 Pro и используется по умолчанию в Pro-режиме.
+- Удалены переключатель старой Pro-модели и метка Legacy в настройках.
+- Pro-таймаут определяется списком Pro-моделей, чтобы Argon сохранял лимит ожидания 240 секунд.
+
 ## [3.7.1] - 2026-09-04
 
 ### Changed

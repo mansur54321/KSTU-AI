@@ -5,7 +5,7 @@
             'gemini-3.5-flash-lite'
         ],
         MODELS_PRO: [
-            'gemini-3.1-pro-preview'
+            'gemini-4-argon'
         ],
         MODELS_PRO_FALLBACK: [
             'gemini-3.8-flash',
@@ -37,8 +37,8 @@ XQIDAQAB
         API_KEY_REGEX: /^(?:AIzaSy[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9._-]{20,})$/
     };
 
-    function selectModels({ pro = false, useLegacyPro = false } = {}) {
-        if (!pro || !useLegacyPro) return [...CONFIG.MODELS];
+    function selectModels({ pro = false } = {}) {
+        if (!pro) return [...CONFIG.MODELS];
         return [...CONFIG.MODELS_PRO];
     }
 

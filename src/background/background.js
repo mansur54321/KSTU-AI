@@ -198,7 +198,7 @@ async function askGeminiViaApi(parts, apiKeys, models, requestId = 'no-id') {
             let timeoutId = null;
             try {
                 const controller = new AbortController();
-                const timeoutMs = model.includes('pro') ? 240000 : 120000;
+                const timeoutMs = CONFIG.MODELS_PRO.includes(model) ? 240000 : 120000;
                 timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
                 const requestUrl = `${CONFIG.API_BASE_URL}${model}:generateContent`;
 
@@ -347,15 +347,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'get_models') {
-        chrome.storage.sync.get(['cfgProLegacy'], (storage) => {
-            const selectedModels = selectModels({
-                pro: request.pro === true,
-                useLegacyPro: storage.cfgProLegacy === true
-            });
-            console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
-            sendResponse(selectedModels);
-        });
-        return true;
+        const selectedModels = selectModels({ pro: request.pro === true });
+        console.log(`${DEBUG_PREFIX} Selected ${request.pro ? 'PRO' : 'basic'} models:`, selectedModels);
+        sendResponse(selectedModels);
     }
 
     if (request.action === 'get_fallback_models') {

@@ -22,8 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cfgProModels = document.getElementById('cfg-pro-models');
     const cfgFastMode = document.getElementById('cfg-fast-mode');
     const cfgFastModeRow = document.getElementById('cfg-fast-mode-row');
-    const cfgProLegacy = document.getElementById('cfg-pro-legacy');
-    const cfgProLegacyRow = document.getElementById('cfg-pro-legacy-row');
     const exportBtn = document.getElementById('export-settings');
     const importBtn = document.getElementById('import-settings');
     const importFile = document.getElementById('import-file');
@@ -78,8 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const data = await chrome.storage.sync.get([
         'isEnabled', 'solvedCount',
-        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels', 'cfgFastMode',
-        'cfgProLegacy'
+        'cfgAutoClick', 'cfgMarker', 'language', 'rateLimitHits', 'cfgProModels', 'cfgFastMode'
     ]);
 
     let isEnabled = data.isEnabled !== false;
@@ -91,7 +88,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     let rateLimitHits = data.rateLimitHits || 0;
     let proModels = data.cfgProModels || false;
     let fastMode = data.cfgFastMode || false;
-    let proLegacy = data.cfgProLegacy === true;
 
     updateMasterUI(isEnabled);
     solveCountEl.innerText = solvedCount;
@@ -103,7 +99,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     cfgLanguage.value = language;
     cfgProModels.checked = proModels;
     cfgFastMode.checked = fastMode && proModels;
-    cfgProLegacy.checked = proLegacy && proModels;
     updateProSubOptionsVisibility(proModels);
     versionText.innerText = 'v' + chrome.runtime.getManifest().version;
     rateLimitText.innerText = `Лимитов: ${rateLimitHits}`;
@@ -141,11 +136,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         cfgFastModeRow.style.display = proEnabled ? 'flex' : 'none';
         cfgFastMode.disabled = !proEnabled;
         if (!proEnabled) cfgFastMode.checked = false;
-
-        // Legacy Pro model
-        cfgProLegacyRow.style.display = proEnabled ? 'flex' : 'none';
-        cfgProLegacy.disabled = !proEnabled;
-        if (!proEnabled) cfgProLegacy.checked = false;
     }
 
     openSettingsBtn.addEventListener('click', () => {
@@ -166,18 +156,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateProSubOptionsVisibility(enabled);
         chrome.storage.sync.set({ 
             cfgProModels: enabled, 
-            cfgFastMode: enabled ? cfgFastMode.checked : false,
-            cfgProLegacy: enabled ? cfgProLegacy.checked : false
+            cfgFastMode: enabled ? cfgFastMode.checked : false
         });
     });
     cfgFastMode.addEventListener('change', (e) => chrome.storage.sync.set({ cfgFastMode: e.target.checked && cfgProModels.checked }));
-    cfgProLegacy.addEventListener('change', (e) => {
-        const enabled = e.target.checked && cfgProModels.checked;
-        updateProSubOptionsVisibility(cfgProModels.checked);
-        chrome.storage.sync.set({
-            cfgProLegacy: enabled
-        });
-    });
 
     keysInput.addEventListener('input', () => {
         const normalized = normalizeKeyLines(keysInput.value);
@@ -292,7 +274,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (importData.language) cfgLanguage.value = importData.language;
             if (importData.cfgProModels !== undefined) cfgProModels.checked = importData.cfgProModels;
             if (importData.cfgFastMode !== undefined) cfgFastMode.checked = importData.cfgFastMode && cfgProModels.checked;
-            if (importData.cfgProLegacy !== undefined) cfgProLegacy.checked = importData.cfgProLegacy && cfgProModels.checked;
             updateProSubOptionsVisibility(cfgProModels.checked);
             statusMsg.innerText = 'Импортировано!';
             statusMsg.style.color = '#67b279';
